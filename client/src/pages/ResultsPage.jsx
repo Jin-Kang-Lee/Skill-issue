@@ -1,10 +1,10 @@
-import React from 'react'
-import { useLocation } from 'react-router-dom'
+import React, { useContext } from 'react'
+import { SuggestionsContext } from '../context/SuggestionsContext'
 import { SparklesIcon, BriefcaseIcon } from '@heroicons/react/24/solid'
 
 function ResultsPage() {
-  const location = useLocation()
-  const suggestions = location.state?.suggestions
+  // 1) Grab the suggestions from context instead of location.state
+  const { suggestions } = useContext(SuggestionsContext)
 
   return (
     <div className="min-h-screen bg-background text-white py-16 px-6">
@@ -39,7 +39,7 @@ function ResultsPage() {
         ) : (
           <div className="flex flex-col items-center text-white mt-12">
             <p className="text-lg">No suggestions available</p>
-            <p className="text-sm">Try uploading your resume or enter your skills again</p>
+            <p className="text-sm">Try uploading your resume or entering your skills again</p>
           </div>
         )}
       </div>

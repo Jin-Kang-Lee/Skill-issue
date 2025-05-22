@@ -1,12 +1,17 @@
-import React, { useState } from 'react'
+import React, { useState, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   DocumentArrowUpIcon,
   SparklesIcon,
   ClipboardDocumentListIcon
 } from '@heroicons/react/24/solid'
+// 1) Import the SuggestionsContext
+import { SuggestionsContext } from '../context/SuggestionsContext'
 
 function HomePage() {
+  // 2) Grab setSuggestions from context
+  const { setSuggestions } = useContext(SuggestionsContext)
+
   const [file, setFile] = useState(null)
   const [skills, setSkills] = useState('')
   const navigate = useNavigate()
@@ -23,7 +28,6 @@ function HomePage() {
     e.preventDefault()
 
     const formData = new FormData()
-
     if (file) {
       formData.append('file', file)
     } else if (skills.trim()) {
@@ -46,7 +50,10 @@ function HomePage() {
       const data = await res.json()
 
       if (data.job_suggestions) {
-        navigate('/results', { state: { suggestions: data.job_suggestions } })
+        // 3) Store the AI response in context
+        setSuggestions(data.job_suggestions)
+        // 4) Navigate to ResultsPage without passing state
+        navigate('/results')
       } else {
         alert('No job suggestions received.')
       }
@@ -57,7 +64,7 @@ function HomePage() {
   }
 
   return (
-    <div className="relative min-h-screen bg-background text-white px-6  pb-12 flex items-center justify-center overflow-hidden">
+    <div className="relative min-h-screen bg-background text-white px-6 pb-12 flex items-center justify-center overflow-hidden">
       {/* SVG background wave */}
       <img
         src="/homepage-waves.svg"
@@ -65,9 +72,9 @@ function HomePage() {
         className="absolute bottom-0 left-0 w-full pointer-events-none z-0"
       />
 
-      {/* Main content above SVG */}
+      {/* Main content */}
       <div className="relative z-10 w-full max-w-6xl grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-        {/* LEFT SIDE – Text content */}
+        {/* Left side text */}
         <div className="mt-[-100px]">
           <h1 className="text-4xl font-extrabold text-primary mb-4">
             Unlock Your Career Potential with AI
@@ -78,7 +85,7 @@ function HomePage() {
           </p>
         </div>
 
-        {/* RIGHT SIDE – Form box */}
+        {/* Right side form */}
         <div className="bg-white bg-opacity-90 backdrop-blur-md border border-gray-200 shadow-xl rounded-2xl p-8 text-background">
           <div className="text-center mb-6">
             <SparklesIcon className="w-8 h-8 mx-auto text-tertiary mb-1" />

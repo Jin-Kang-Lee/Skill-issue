@@ -5,19 +5,20 @@ import docx
 from openai import OpenAI
 import os
 from dotenv import load_dotenv
+import requests
 
-# #Load environment variables from .env
-# load_dotenv()
+# Load environment variables from .env
+load_dotenv()
 
-#OpenAI API key
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Ollama local API endpoint (change via .env if needed)
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434/v1/chat/completions")
 
 app = FastAPI()
 
-# Allow frontend to talk to backend
+# Allow frontend to talk to this backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000"],  # adjust if your frontend URL differs
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -32,17 +33,25 @@ def extract_text_from_docx(file):
     doc = docx.Document(file)
     return "\n".join([para.text for para in doc.paragraphs])
 
-# Function to generate job roles using OpenAI
-def suggest_jobs(prompt_text):
-    response = client.chat.completions.create(
-        model="gpt-4",
-        messages=[
+# Function to generate job roles using Ollama
+def suggest_jobs(prompt_text: str) -> str:
+    """
+    Send a chat completion request to Ollama's local API.
+    Returns the AI-generated suggestion text.
+    """
+    payload = {
+        "model": "llama3:latest",  # or your chosen model
+        "messages": [
             {"role": "system", "content": "You are a helpful career advisor."},
-            {"role": "user", "content": prompt_text}
+            {"role": "user",   "content": prompt_text}
         ],
-        temperature=0.7
-    )
-    return response.choices[0].message.content.strip()
+        "temperature": 0.7
+    }
+    response = requests.post(OLLAMA_URL, json=payload)
+    response.raise_for_status()
+    # Ollama returns a structure similar to OpenAI
+    return response.json()["choices"][0]["message"]["content"].strip()
+
 
 #Function that handles resume upload from user
 @app.post("/upload-resume/")
