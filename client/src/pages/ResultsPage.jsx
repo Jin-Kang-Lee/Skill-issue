@@ -1,40 +1,105 @@
-import React, { useContext } from 'react'
+import React, { useContext, useState, useEffect } from 'react'
 import { SuggestionsContext } from '../context/SuggestionsContext'
-import { SparklesIcon, BriefcaseIcon } from '@heroicons/react/24/solid'
+import { BriefcaseIcon, SparklesIcon, XMarkIcon } from '@heroicons/react/24/solid'
 
 function ResultsPage() {
-  // 1) Grab the suggestions from context instead of location.state
   const { suggestions } = useContext(SuggestionsContext)
 
+  // Parse suggestions into lines and group job entries
+  const lines = suggestions ? suggestions.split('\n').filter(Boolean) : []
+  const introText = lines.length > 0 ? lines[0] : ''
+  const roleLines = lines.slice(1)
+  const groupedRoles = []
+  for (let i = 0; i < roleLines.length; i++) {
+    const current = roleLines[i]
+    const next = roleLines[i + 1]
+    
+    if (/^Required Skills:/i.test(next)) {
+      groupedRoles.push({ job: current, required: next })
+      i++
+    } else {
+      groupedRoles.push({ job: current })
+    }
+  }
+
+  // State for side panel
+  const [activeRole, setActiveRole] = useState(null)
+  const [roleInfo, setRoleInfo] = useState({ faqs: [], description: '' })
+  const [loadingInfo, setLoadingInfo] = useState(false)
+
+  // Handle card click to fetch role info
+  const handleCardClick = async (title) => {
+    setActiveRole(title)
+    setLoadingInfo(true)
+    try {
+      const res = await fetch('http://127.0.0.1:8000/role-info/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ role: title, skills: suggestions })
+      })
+      const text = await res.text()
+      const data = JSON.parse(text)
+      setRoleInfo({
+        description: data.description || '',
+        faqs: Array.isArray(data.faqs) ? data.faqs : []
+      })
+    } catch (err) {
+      console.error('Failed to load role info', err)
+      setRoleInfo({ description: 'Failed to load info.', faqs: [] })
+    } finally {
+      setLoadingInfo(false)
+    }
+  }
+
+  // If you want to prefetch all role info on mount, uncomment:
+  // useEffect(() => {
+  //   groupedRoles.forEach(role => handleCardClick(role.job.match(/\*\*(.*?)\*\*/)?.[1]));
+  // }, [])
+
   return (
-    <div className="min-h-screen bg-background text-white py-16 px-6">
-      <div className="max-w-4xl mx-auto text-center">
-        <h2 className="text-4xl font-bold text-white mb-4 flex items-center justify-center gap-3">
+    <div className="min-h-screen bg-background text-white px-6 py-16 relative">
+      <div className="max-w-5xl mx-auto">
+        <h2 className="text-4xl font-bold text-white text-center mb-4 flex items-center justify-center gap-3">
           <SparklesIcon className="w-8 h-8 text-tertiary" />
           Job Role Suggestions
         </h2>
-        <p className="text-secondary mb-10">
-          Based on your skills and experience, here are some roles you might be interested in
-        </p>
+        <p className="text-secondary text-center text-lg mb-12">{introText}</p>
 
-        {suggestions ? (
+        {groupedRoles.length > 0 ? (
           <div className="grid md:grid-cols-2 gap-6">
-            {suggestions.split('\n').map((suggestion, index) => (
-              <div
-                key={index}
-                className="bg-white bg-opacity-90 backdrop-blur-sm p-6 rounded-xl shadow-md hover:shadow-lg transition-all border border-white/10 hover:border-accent"
-              >
-                <div className="flex items-center gap-3 mb-2">
-                  <BriefcaseIcon className="w-6 h-6 text-tertiary" />
-                  <h3 className="text-lg font-semibold text-background">
-                    {suggestion}
-                  </h3>
+            {groupedRoles.map((role, index) => {
+              const match = role.job.match(/\*\*(.*?)\*\*: (.+)/)
+              const title = match ? match[1] : role.job.trim()
+              const description = match ? match[2] : ''
+
+              const skillsList = role.required
+            ? role.required
+                .split(':')[1]        // get the “ Excel, SQL, Python” part
+                .split(',')           // [ " Excel", " SQL", " Python" ]
+                .map(s => s.trim())   // [ "Excel", "SQL", "Python" ]
+            : []
+
+              return (
+                <div
+                  key={index}
+                  onClick={() => handleCardClick(title)}
+                  className="cursor-pointer bg-background border border-white/10 hover:border-tertiary hover:bg-white/5 transition p-5 rounded-lg shadow-sm"
+                >
+                  <div className="flex items-start gap-4">
+                    <BriefcaseIcon className="w-6 h-6 text-tertiary flex-shrink-0 mt-1" />
+                    <div>
+                      <h3 className="text-lg font-semibold text-white mb-1">{title}</h3>
+                      <p className="text-sm text-gray-300 leading-relaxed mb-2">{description}</p>
+                      {role.required && (
+                        <p className="text-xs text-accent italic">
+                          {role.required}
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <p className="text-sm text-background/80">
-                  Explore opportunities and see how this aligns with your profile
-                </p>
-              </div>
-            ))}
+              )
+            })}
           </div>
         ) : (
           <div className="flex flex-col items-center text-white mt-12">
@@ -43,6 +108,35 @@ function ResultsPage() {
           </div>
         )}
       </div>
+
+      {/* Side panel drawer */}
+      {activeRole && (
+        <aside className="fixed right-0 top-0 h-full w-80 bg-background/90 p-6 shadow-lg overflow-auto">
+          <button
+            onClick={() => setActiveRole(null)}
+            className="absolute top-4 right-4 text-gray-400 hover:text-white"
+          >
+            <XMarkIcon className="w-6 h-6" />
+          </button>
+          {loadingInfo ? (
+            <p className="text-white mt-8 text-center">Loading...</p>
+          ) : (
+            <>
+              <h3 className="text-2xl font-bold text-white mb-4">{activeRole}</h3>
+              <p className="text-gray-300 mb-6">{roleInfo.description}</p>
+              <h4 className="text-white font-semibold mb-2">FAQs</h4>
+              <ul className="list-disc list-inside text-sm text-gray-200 space-y-2">
+                {roleInfo.faqs.map((f, i) => (
+                  <li key={i}>
+                    <strong>{f.question}</strong><br />
+                    {f.answer}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </aside>
+      )}
     </div>
   )
 }

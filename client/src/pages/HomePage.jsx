@@ -5,15 +5,14 @@ import {
   SparklesIcon,
   ClipboardDocumentListIcon
 } from '@heroicons/react/24/solid'
-// 1) Import the SuggestionsContext
 import { SuggestionsContext } from '../context/SuggestionsContext'
 
 function HomePage() {
-  // 2) Grab setSuggestions from context
+  //Grab setSuggestions from context
   const { setSuggestions } = useContext(SuggestionsContext)
-
   const [file, setFile] = useState(null)
   const [skills, setSkills] = useState('')
+  const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
 
   const handleFileChange = (e) => {
@@ -26,6 +25,7 @@ function HomePage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    setLoading(true)
 
     const formData = new FormData()
     if (file) {
@@ -34,6 +34,7 @@ function HomePage() {
       formData.append('skills', skills)
     } else {
       alert('Please upload a resume or enter your skills.')
+      setLoading(false)
       return
     }
 
@@ -50,9 +51,9 @@ function HomePage() {
       const data = await res.json()
 
       if (data.job_suggestions) {
-        // 3) Store the AI response in context
+        //Store the AI response in context
         setSuggestions(data.job_suggestions)
-        // 4) Navigate to ResultsPage without passing state
+        //Navigate to ResultsPage without passing state
         navigate('/results')
       } else {
         alert('No job suggestions received.')
@@ -60,6 +61,8 @@ function HomePage() {
     } catch (err) {
       console.error('❌ Upload failed:', err)
       alert('Something went wrong.')
+    } finally {
+      setLoading(false) //turn off spinner
     }
   }
 
@@ -128,9 +131,34 @@ function HomePage() {
 
             <button
               type="submit"
-              className="w-full py-3 bg-accent hover:bg-primary text-white font-semibold rounded-lg transition-all"
+              disabled={loading}
+              className={`w-full py-3 font-semibold rounded-lg transition-all flex items-center justify-center ${
+                loading
+                  ? 'bg-primary text-white cursor-not-allowed'
+                  : 'bg-accent hover:bg-primary text-white'
+              }`}
             >
-              Get Suggestions
+              {loading ? (
+                <svg className="animate-spin h-6 w-6 text-tertiary"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8v8H4z"
+                  />
+                </svg>
+              ) : (
+                'Get Suggestions'
+              )}
             </button>
           </form>
 
