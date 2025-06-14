@@ -1,4 +1,4 @@
-import React, { useContext, useState, useEffect } from 'react'
+import React, { useContext, useState} from 'react'
 import { SuggestionsContext } from '../context/SuggestionsContext'
 import { BriefcaseIcon, SparklesIcon, XMarkIcon } from '@heroicons/react/24/solid'
 
@@ -6,9 +6,8 @@ function ResultsPage() {
   const { suggestions } = useContext(SuggestionsContext)
 
   // Parse suggestions into lines and group job entries
-  const lines = suggestions ? suggestions.split('\n').filter(Boolean) : []
-  const introText = lines.length > 0 ? lines[0] : ''
-  const roleLines = lines.slice(1)
+  // const lines = suggestions ? suggestions.split('\n').filter(Boolean) : []
+  const roleLines = suggestions ? suggestions.split('\n').filter(Boolean) : []
   const groupedRoles = []
   for (let i = 0; i < roleLines.length; i++) {
     const current = roleLines[i]
@@ -63,16 +62,16 @@ function ResultsPage() {
           <SparklesIcon className="w-8 h-8 text-tertiary" />
           Job Role Suggestions
         </h2>
-        <p className="text-secondary text-center text-lg mb-12">{introText}</p>
+        {/* <p className="text-secondary text-center text-lg mb-12">{introText}</p> */}
 
         {groupedRoles.length > 0 ? (
           <div className="grid md:grid-cols-2 gap-6">
             {groupedRoles.map((role, index) => {
-              const match = role.job.match(/\*\*(.*?)\*\*: (.+)/)
+              const match = role.job.match(/\*\*(.+?)\*\*:\s*(.+)/)
               const title = match ? match[1] : role.job.trim()
               const description = match ? match[2] : ''
 
-              const skillsList = role.required
+              // const skillsList = role.required
             ? role.required
                 .split(':')[1]        // get the “ Excel, SQL, Python” part
                 .split(',')           // [ " Excel", " SQL", " Python" ]

@@ -1,5 +1,7 @@
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import Request, FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+import traceback
+from fastapi.responses import PlainTextResponse
 import pdfplumber
 import docx
 import os
@@ -7,6 +9,10 @@ import requests
 from dotenv import load_dotenv
 from fastapi import Form
 import requests
+# from RAG_engine import retrieve_context, generate_answer
+import json
+from sentence_transformers import SentenceTransformer
+
 
 
 # Load environment variables from .env
@@ -18,13 +24,28 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434/v1/chat/completions
 
 app = FastAPI()
 
+origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+
+
 # Allow frontend to talk to this backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # adjust if your frontend URL differs
+    allow_origins=["http://localhost:3000",
+                    "http://127.0.0.1:3000"],  # adjust if your frontend URL differs
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def catch_exceptions_middleware(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception as e:
+        tb = traceback.format_exc()
+        print("[✖] Error in request:", tb)
+        return PlainTextResponse("Internal server error", status_code=500)
+
+
 
 # Utility function to read PDF content
 def extract_text_from_pdf(file_path: str) -> str:
@@ -74,14 +95,28 @@ def suggest_jobs(user_input: str) -> str:
     }
 
     payload = {
-        "model": "llama3:8b",
+        "model": "phi3:mini",
         "messages": [system_message, few_shot, user_message],
         "temperature": 0.7
     }
 
-    response = requests.post(OLLAMA_URL, json=payload)
+    # response = requests.post(OLLAMA_URL, json=payload)
+    # response.raise_for_status()
+    # return response.json()["choices"][0]["message"]["content"].strip()
+    response = requests.post(OLLAMA_URL, json=payload, stream=True)
     response.raise_for_status()
-    return response.json()["choices"][0]["message"]["content"].strip()
+
+    full_content = ""
+    for line in response.iter_lines():
+        if not line:
+            continue
+        obj = json.loads(line.decode("utf-8"))
+        part = obj.get("message", {}).get("content", "")
+        full_content += part
+        if obj.get("done") is True:
+            break
+
+    return full_content.strip()
 
 @app.post("/upload-resume/")
 async def upload_resume(file: UploadFile = File(None), skills: str = Form(None)):
@@ -136,7 +171,7 @@ async def role_info(
         "content": f"Role: {role}\nUser skills: {skills}\n\nRespond ONLY with JSON."
     }
     payload = {
-        "model": "llama3:8b",
+        "model": "phi3:mini",
         "messages": [system_message, user_message],
         "temperature": 0.7
     }
