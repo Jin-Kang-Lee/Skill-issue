@@ -12,6 +12,8 @@ import requests
 # from RAG_engine import retrieve_context, generate_answer
 import json
 from sentence_transformers import SentenceTransformer
+import urllib.parse
+import re
 
 
 
@@ -95,7 +97,7 @@ def suggest_jobs(user_input: str) -> str:
     }
 
     payload = {
-        "model": "phi3:mini",
+        "model": "mistral:instruct",
         "messages": [system_message, few_shot, user_message],
         "temperature": 0.7
     }
@@ -171,7 +173,7 @@ async def role_info(
         "content": f"Role: {role}\nUser skills: {skills}\n\nRespond ONLY with JSON."
     }
     payload = {
-        "model": "phi3:mini",
+        "model": "mistral:instruct",
         "messages": [system_message, user_message],
         "temperature": 0.7
     }
@@ -180,3 +182,33 @@ async def role_info(
     # Return the raw JSON string from the model
     return resp.json()["choices"][0]["message"]["content"]
 
+
+
+
+def normalize_role(role: str) -> str:
+    parts = re.split(r'\s+(for|in|at|on|within)\b', role, flags=re.IGNORECASE)
+    return parts[0].strip()
+
+
+ 
+LOCATION = "Singapore"
+
+def normalize_role(role: str) -> str:
+    parts = re.split(r'\s+(for|in|at|on|within)\b', role, flags=re.IGNORECASE)
+    return parts[0].strip()
+
+def build_search_urls(role: str):
+    simple = normalize_role(role)
+    q = urllib.parse.quote_plus(simple)
+    base_urls = {
+      "Indeed": f"https://sg.indeed.com/jobs?q={q}&l={LOCATION}&fromage=1",
+      "LinkedIn": f"https://www.linkedin.com/jobs/search/?keywords={q}&location={LOCATION}&f_TPR=r86400",
+      "JobStreet": f"https://www.jobstreet.com.sg/en/job-search/{q}-jobs-in-Singapore",
+      "MyCareersFuture": f"https://www.mycareersfuture.gov.sg/search?search={q}&sortBy=relevancy&page=0"
+    }
+    return base_urls
+
+@app.get("/api/search-links/")
+async def search_links(role: str):
+    urls = build_search_urls(role)
+    return [{"site": s, "url": u} for s, u in urls.items()]
