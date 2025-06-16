@@ -1,6 +1,6 @@
 import React from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { HomeIcon, SparklesIcon } from '@heroicons/react/24/outline'
+import { HomeIcon, SparklesIcon, DocumentTextIcon } from '@heroicons/react/24/outline'
 
 function Navbar() {
   const location = useLocation()
@@ -27,6 +27,11 @@ function Navbar() {
             <Link to="/results" className={linkClasses('/results')}>
               <SparklesIcon className="w-5 h-5" />
               Results
+            </Link>
+
+            <Link to="/resume-feedback" className={linkClasses('/resume-feedback')}>
+              <DocumentTextIcon className="w-5 h-5" />
+              Resume Feedback
             </Link>
           </div>
         </div>

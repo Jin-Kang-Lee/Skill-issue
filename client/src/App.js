@@ -7,6 +7,7 @@ import Navbar from './components/Navbar';
 //Import pages
 import HomePage from './pages/HomePage';
 import ResultsPage from './pages/ResultsPage';
+import ResumeFeedbackPage from './pages/ResumeFeedbackPage';
 
 function App() {
   return (
@@ -22,6 +23,9 @@ function App() {
 
           {/* Results route */}
           <Route path="/results" element={<ResultsPage />} />
+
+          {/* Resume Feedback route */}
+          <Route path="/resume-feedback" element={<ResumeFeedbackPage />} />
         </Routes>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import React, { useContext, useState } from 'react'
 import { SuggestionsContext } from '../context/SuggestionsContext'
-import { BriefcaseIcon, XMarkIcon, SparklesIcon } from '@heroicons/react/24/solid'
+import { BriefcaseIcon, SparklesIcon } from '@heroicons/react/24/solid'
 
 function ResultsPage() {
   const { suggestions } = useContext(SuggestionsContext)
@@ -17,31 +17,33 @@ function ResultsPage() {
     }
   }
 
-  // NEW STATE for links
-  const [activeRole, setActiveRole] = useState(null)
-  const [links, setLinks] = useState([])
-  const [loadingLinks, setLoadingLinks] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(null)
+  const [links, setLinks] = useState({})
+  const [loadingIndex, setLoadingIndex] = useState(null)
 
-  // NEW: fetch search URLs for clicked role
-  const handleCardClick = async (title) => {
-    setActiveRole(title)
-    setLinks([])
-    setLoadingLinks(true)
+  const handleCardClick = async (index, title) => {
+    if (activeIndex === index) {
+      setActiveIndex(null)
+      return
+    }
+
+    setActiveIndex(index)
+    setLoadingIndex(index)
     try {
       const res = await fetch(`http://localhost:8000/api/search-links/?role=${encodeURIComponent(title)}`)
       const data = await res.json()
-      setLinks(data)
+      setLinks((prev) => ({ ...prev, [index]: data }))
     } catch (err) {
       console.error('Failed to load links', err)
     } finally {
-      setLoadingLinks(false)
+      setLoadingIndex(null)
     }
   }
 
   return (
-    <div className="min-h-screen bg-background text-white px-6 py-16 relative">
+    <div className="min-h-screen bg-background text-white px-6 py-16">
       <div className="max-w-5xl mx-auto">
-        <h2 className="text-4xl font-bold text-center mb-4 flex items-center justify-center gap-3">
+        <h2 className="text-4xl font-bold text-center mb-8 flex items-center justify-center gap-3">
           <SparklesIcon className="w-8 h-8 text-tertiary" />
           Job Role Suggestions
         </h2>
@@ -52,13 +54,19 @@ function ResultsPage() {
               const match = role.job.match(/\*\*(.+?)\*\*:\s*(.+)/)
               const title = match ? match[1] : role.job.trim()
               const description = match ? match[2] : ''
+
+              const isActive = activeIndex === idx
+              const roleLinks = links[idx] || []
+
               return (
                 <div
                   key={idx}
-                  onClick={() => handleCardClick(title)}
-                  className="cursor-pointer bg-background border border-white/10 hover:border-tertiary p-5 rounded-lg shadow-sm transition"
+                  className="bg-background border border-white/10 hover:border-tertiary p-5 rounded-lg shadow-sm transition"
                 >
-                  <div className="flex items-start gap-4">
+                  <div
+                    className="cursor-pointer flex items-start gap-4"
+                    onClick={() => handleCardClick(idx, title)}
+                  >
                     <BriefcaseIcon className="w-6 h-6 text-tertiary mt-1" />
                     <div>
                       <h3 className="text-lg font-semibold text-white mb-1">{title}</h3>
@@ -68,6 +76,32 @@ function ResultsPage() {
                       )}
                     </div>
                   </div>
+
+                  {isActive && (
+                    <div className="mt-4 border-t border-white/10 pt-4 text-sm">
+                      {loadingIndex === idx ? (
+                        <p className="text-gray-400">Loading job links...</p>
+                      ) : (
+                        <>
+                          <h4 className="font-semibold text-white mb-2">Search links</h4>
+                          <ul className="space-y-1">
+                            {roleLinks.map((l, i) => (
+                              <li key={i}>
+                                <a
+                                  href={l.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-tertiary hover:underline"
+                                >
+                                  🔗 Search on {l.site}
+                                </a>
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -79,43 +113,6 @@ function ResultsPage() {
           </div>
         )}
       </div>
-
-      {/* Side panel */}
-      {activeRole && (
-        <aside className="fixed right-0 top-0 h-full w-80 bg-background/90 p-6 shadow-lg overflow-auto">
-          <button
-            onClick={() => setActiveRole(null)}
-            className="absolute right-4 top-4 text-gray-400 hover:text-white"
-          >
-            <XMarkIcon className="w-6 h-6" />
-          </button>
-          <h3 className="text-2xl font-bold mb-4">{activeRole}</h3>
-
-          {loadingLinks ? (
-            <p className="text-center text-white mt-8">Loading job links...</p>
-          ) : (
-            links.length > 0 && (
-              <>
-                <h4 className="text-white font-semibold mt-4">Search links</h4>
-                <ul className="list-disc list-inside text-sm text-gray-200 space-y-1">
-                  {links.map((l, i) => (
-                    <li key={i}>
-                      <a
-                        href={l.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-tertiary hover:underline"
-                      >
-                        Search on {l.site}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )
-          )}
-        </aside>
-      )}
     </div>
   )
 }

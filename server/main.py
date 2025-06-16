@@ -149,6 +149,27 @@ async def upload_resume(file: UploadFile = File(None), skills: str = Form(None))
     return {"job_suggestions": suggestions}
 
 
+@app.post("/resume-feedback/")
+async def resume_feedback(file: UploadFile = File(...)):
+    temp_path = f"temp_{file.filename}"
+    with open(temp_path, "wb") as f:
+        f.write(await file.read())
+
+    if file.filename.lower().endswith(".pdf"):
+        resume_text = extract_text_from_pdf(temp_path)
+    elif file.filename.lower().endswith(".docx"):
+        resume_text = extract_text_from_docx(temp_path)
+    else:
+        os.remove(temp_path)
+        return {"error": "Unsupported file format. Only PDF or DOCX allowed."}
+
+    os.remove(temp_path)
+
+    # Generate feedback
+    feedback = generate_resume_feedback(resume_text)
+    return {"feedback": feedback}
+
+
 @app.post("/role-info/")
 async def role_info(
     role: str = Form(...),
@@ -185,18 +206,18 @@ async def role_info(
 
 
 
-def normalize_role(role: str) -> str:
-    parts = re.split(r'\s+(for|in|at|on|within)\b', role, flags=re.IGNORECASE)
-    return parts[0].strip()
 
 
- 
+
+#SETTING JOB POSTING LOCATIONS
 LOCATION = "Singapore"
 
+#NORMALIZING JOB ROLES
 def normalize_role(role: str) -> str:
     parts = re.split(r'\s+(for|in|at|on|within)\b', role, flags=re.IGNORECASE)
     return parts[0].strip()
 
+#PROVIDE LINKS FOR JOB POSTINGS
 def build_search_urls(role: str):
     simple = normalize_role(role)
     q = urllib.parse.quote_plus(simple)
@@ -212,3 +233,52 @@ def build_search_urls(role: str):
 async def search_links(role: str):
     urls = build_search_urls(role)
     return [{"site": s, "url": u} for s, u in urls.items()]
+
+
+
+
+
+#GENERATE FEEDBACK FOR RESUME
+def generate_resume_feedback(resume_text: str) -> str:
+    prompt = f"""
+You are an expert resume reviewer. Analyze the resume below and give section-based feedback.
+
+Break your feedback into the following labeled sections (only include sections that exist in the resume):
+
+1. Summary
+2. Work Experience
+3. Skills
+4. Education
+5. Formatting & Structure
+6. Overall Suggestions
+
+For each section:
+- Mention what is good (if any)
+- Point out missing or weak parts
+- Suggest 1–2 ways to improve
+- Be concise and friendly
+
+Resume:
+\"\"\"{resume_text}\"\"\"
+"""
+
+    payload = {
+        "model": "mistral:instruct",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.7
+    }
+
+    response = requests.post(OLLAMA_URL, json=payload, stream=True)
+    response.raise_for_status()
+
+    full_content = ""
+    for line in response.iter_lines():
+        if not line:
+            continue
+        obj = json.loads(line.decode("utf-8"))
+        part = obj.get("message", {}).get("content", "")
+        full_content += part
+        if obj.get("done") is True:
+            break
+
+    return full_content.strip()

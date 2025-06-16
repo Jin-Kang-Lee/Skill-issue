@@ -9,7 +9,7 @@ import { SuggestionsContext } from '../context/SuggestionsContext'
 
 function HomePage() {
   //Grab setSuggestions from context
-  const { setSuggestions } = useContext(SuggestionsContext)
+  const { setSuggestions, setFeedback } = useContext(SuggestionsContext)
   const [file, setFile] = useState(null)
   const [skills, setSkills] = useState('')
   const [loading, setLoading] = useState(false)
@@ -27,11 +27,16 @@ function HomePage() {
     e.preventDefault()
     setLoading(true)
 
-    const formData = new FormData()
+    // Create two separate FormData objects (because FormData is stream-like and can't be reused)
+    const formData1 = new FormData()
+    const formData2 = new FormData()
+
     if (file) {
-      formData.append('file', file)
+      formData1.append('file', file)
+      formData2.append('file', file)
     } else if (skills.trim()) {
-      formData.append('skills', skills)
+      formData1.append('skills', skills)
+      formData2.append('skills', skills)
     } else {
       alert('Please upload a resume or enter your skills.')
       setLoading(false)
@@ -39,32 +44,45 @@ function HomePage() {
     }
 
     try {
-      const res = await fetch('http://127.0.0.1:8000/upload-resume/', {
-        method: 'POST',
-        body: formData
-      })
+      // Run both requests in parallel
+      const [res, feedbackRes] = await Promise.all([
+        fetch('http://127.0.0.1:8000/upload-resume/', {
+          method: 'POST',
+          body: formData1
+        }),
+        fetch('http://127.0.0.1:8000/resume-feedback/', {
+          method: 'POST',
+          body: formData2
+        })
+      ])
 
-      if (!res.ok) {
+      // Handle errors
+      if (!res.ok || !feedbackRes.ok) {
         throw new Error('Server error')
       }
 
       const data = await res.json()
+      const feedbackData = await feedbackRes.json()
 
       if (data.job_suggestions) {
-        //Store the AI response in context
         setSuggestions(data.job_suggestions)
-        //Navigate to ResultsPage without passing state
-        navigate('/results')
       } else {
         alert('No job suggestions received.')
       }
+
+      if (feedbackData.feedback) {
+        setFeedback(feedbackData.feedback)
+      }
+
+      navigate('/results')
     } catch (err) {
       console.error('❌ Upload failed:', err)
       alert('Something went wrong.')
     } finally {
-      setLoading(false) //turn off spinner
+      setLoading(false)
     }
   }
+
 
   return (
     <div className="relative min-h-screen bg-background text-white px-6 pb-12 flex items-center justify-center overflow-hidden">

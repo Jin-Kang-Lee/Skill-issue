@@ -1,14 +1,13 @@
-import React, { createContext, useState } from 'react';
+import { createContext, useState } from 'react';
 
-export const SuggestionsContext = createContext({
-  suggestions: null,
-  setSuggestions: () => {},
-});
+export const SuggestionsContext = createContext();
 
 export const SuggestionsProvider = ({ children }) => {
   const [suggestions, setSuggestions] = useState(null);
+  const [feedback, setFeedback] = useState(null); // ✅ New
+
   return (
-    <SuggestionsContext.Provider value={{ suggestions, setSuggestions }}>
+    <SuggestionsContext.Provider value={{ suggestions, setSuggestions, feedback, setFeedback }}>
       {children}
     </SuggestionsContext.Provider>
   );
