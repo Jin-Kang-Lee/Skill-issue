@@ -6,20 +6,39 @@ function ResultsPage() {
   const { suggestions } = useContext(SuggestionsContext)
   const roleLines = suggestions?.split('\n').filter(Boolean) || []
   const groupedRoles = []
+
+  
   for (let i = 0; i < roleLines.length; i++) {
-    const current = roleLines[i]
-    const next = roleLines[i + 1]
-    if (/^Required Skills:/i.test(next)) {
-      groupedRoles.push({ job: current, required: next })
-      i++
+    const line = roleLines[i];
+    const roleMatch = line.match(/^\*\*(.+?)\*\*:\s*(.+)/);
+
+    if (roleMatch) {
+      const description = roleMatch[2].trim();
+
+      let requiredSkills = [];
+      let requiredLine = ""; // ✅ Add this
+      if (i + 1 < roleLines.length && /Required Skills:/i.test(roleLines[i + 1])) {
+        requiredLine = roleLines[i + 1].trim(); // ✅ Save full string for UI
+        const skillLine = requiredLine.split(':')[1] || '';
+        requiredSkills = skillLine.split(',').map(s => s.trim()).filter(Boolean);
+        i++; // skip next line
+      }
+
+      groupedRoles.push({
+        job: line,
+        required: requiredLine,     // ✅ this restores the UI text
+        requiredSkills,             // ✅ this supports ATS logic
+        description,
+      });
     } else {
-      groupedRoles.push({ job: current })
+      groupedRoles.push({ job: line });
     }
   }
 
   const [activeIndex, setActiveIndex] = useState(null)
   const [links, setLinks] = useState({})
   const [loadingIndex, setLoadingIndex] = useState(null)
+  const [atsScores, setAtsScores] = useState({});
 
   const handleCardClick = async (index, title) => {
     if (activeIndex === index) {
@@ -39,6 +58,39 @@ function ResultsPage() {
       setLoadingIndex(null)
     }
   }
+
+
+  const handleATSCheck = async (roleTitle, requiredSkills) => {
+    const resumeText = localStorage.getItem("resume_text") || "";
+
+    if (!resumeText) {
+      alert("Resume text not found. Please upload your resume again.");
+      return;
+    }
+
+    const form = new URLSearchParams();
+    form.append("role", roleTitle);
+    form.append("resume_text", resumeText);
+    form.append("skills_csv", requiredSkills.join(","));
+
+    console.log("Sending ATS check for", roleTitle)
+    console.log("With resume_text:", resumeText.slice(0, 100)) // Just preview
+    console.log("With requiredSkills:", requiredSkills)
+
+    try {
+      const res = await fetch("http://localhost:8000/ats-score/", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: form,
+      });
+
+      const data = await res.json();
+      setAtsScores(prev => ({ ...prev, [roleTitle]: data }));
+    } catch (err) {
+      console.error("Failed to get ATS score:", err);
+    }
+  };
+
 
   return (
     <div className="min-h-screen bg-background text-white px-6 py-16">
@@ -100,6 +152,29 @@ function ResultsPage() {
                           </ul>
                         </>
                       )}
+
+                      <button
+                        onClick={() => handleATSCheck(title, role.requiredSkills || [])}
+                        className="mt-4 bg-tertiary text-white px-3 py-1 rounded text-sm hover:bg-tertiary/80"
+                      >
+                        🎯 Check ATS Fit
+                      </button>
+
+                      {atsScores[title] && (
+                        <div className="mt-4 text-sm bg-white/10 border border-white/20 p-4 rounded text-white">
+                          <p>
+                            ATS Match Score: <strong>{atsScores[title].score}%</strong>
+                          </p>
+                          <p className="text-green-300">
+                            ✅ Matched Skills: {atsScores[title].matched_skills.join(", ") || "None"}
+                          </p>
+                          <p className="text-red-300">
+                            ❌ Missing Skills: {atsScores[title].missing_skills.join(", ") || "None"}
+                          </p>
+                        </div>
+                      )}
+
+
                     </div>
                   )}
                 </div>

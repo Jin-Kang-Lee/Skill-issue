@@ -64,6 +64,10 @@ function HomePage() {
       const data = await res.json()
       const feedbackData = await feedbackRes.json()
 
+      if (data.resume_text) {
+        localStorage.setItem("resume_text", data.resume_text)
+      }
+
       if (data.job_suggestions) {
         setSuggestions(data.job_suggestions)
       } else {

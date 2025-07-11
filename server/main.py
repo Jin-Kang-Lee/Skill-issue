@@ -7,7 +7,6 @@ import docx
 import os
 import requests
 from dotenv import load_dotenv
-from fastapi import Form
 import requests
 # from RAG_engine import retrieve_context, generate_answer
 import json
@@ -46,6 +45,27 @@ async def catch_exceptions_middleware(request: Request, call_next):
         tb = traceback.format_exc()
         print("[✖] Error in request:", tb)
         return PlainTextResponse("Internal server error", status_code=500)
+    
+    
+    
+@app.post("/ats-score/")
+async def ats_score(
+    role: str = Form(...),
+    resume_text: str = Form(...),
+    skills_csv: str = Form(...)
+):
+    required_skills = [s.strip() for s in skills_csv.split(",") if s.strip()]
+    resume_text = resume_text.lower()
+
+    matched = [s for s in required_skills if s.lower() in resume_text]
+    missing = [s for s in required_skills if s.lower() not in resume_text]
+    score = round((len(matched) / len(required_skills)) * 100) if required_skills else 0
+
+    return {
+        "score": score,
+        "matched_skills": matched,
+        "missing_skills": missing
+    }
 
 
 
@@ -73,7 +93,7 @@ def suggest_jobs(user_input: str) -> str:
             "Always reference specific user skills or experiences. "
             "For each role, emit a Markdown bullet like:\n\n"
             "  **Role Title**: short explanation  \n"
-            "  Required Skills: comma-separated list of the most important skills  \n\n"
+            "  Required Skills: a comma-separated list of 6 to 10 specific skills and tools relevant to the job. Include both general and technical terms. \n\n"
             "Respond with 3–5 such bullets, no extra conclusion."
         )
     }
