@@ -1,11 +1,10 @@
 import React, { useContext } from 'react';
 import { SuggestionsContext } from '../context/SuggestionsContext';
-import { ExclamationTriangleIcon } from '@heroicons/react/24/solid';
+import { ExclamationTriangleIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
 
 const ResumeFeedbackPage = () => {
   const { feedback } = useContext(SuggestionsContext);
 
-  // Group feedback into sections
   const sections = {};
 
   if (feedback) {
@@ -14,7 +13,6 @@ const ResumeFeedbackPage = () => {
 
     for (const line of lines) {
       const sectionMatch = line.match(/^(\d+\.)?\s*(Summary|Work Experience|Skills|Education|Formatting|Overall Suggestions)/i);
-
       if (sectionMatch) {
         currentSection = sectionMatch[0].replace(/^(\d+\.)?\s*/, '').trim();
         sections[currentSection] = [];
@@ -25,31 +23,65 @@ const ResumeFeedbackPage = () => {
   }
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-3xl font-bold text-tertiary mb-6">Resume Feedback</h1>
+    <div className="min-h-screen bg-background text-white px-6 py-16">
+      <div className="max-w-7xl mx-auto">
+        <h2 className="text-4xl font-bold text-center mb-12 flex items-center justify-center gap-3">
+          <DocumentTextIcon className="w-8 h-8 text-tertiary" />
+          Resume Feedback
+        </h2>
 
-      {!feedback ? (
-        <div className="bg-white/10 border border-white/20 text-white p-6 rounded-lg flex items-center gap-4 shadow-inner">
-          <ExclamationTriangleIcon className="w-8 h-8 text-yellow-400" />
-          <p className="text-lg">
-            No feedback found. Please upload your resume from the <strong>Home</strong> page.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {Object.entries(sections).map(([sectionTitle, points], idx) => (
-            <div key={idx} className="bg-white p-5 rounded-md shadow border-l-4 border-tertiary">
-              <h2 className="text-xl font-semibold text-tertiary mb-2">{sectionTitle}</h2>
-              <ul className="list-disc list-inside space-y-1 text-gray-800">
-                {points.map((point, i) => (
-                  <li key={i}>{point}</li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-      )}
+        {!feedback ? (
+          <div className="bg-white/10 border border-white/20 text-white p-6 rounded-lg flex items-center gap-4 shadow-inner">
+            <ExclamationTriangleIcon className="w-8 h-8 text-yellow-400" />
+            <p className="text-lg">
+              No feedback found. Please upload your resume from the <strong>Home</strong> page.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {Object.entries(sections).map(([sectionTitle, points], idx) => (
+              <div
+                key={idx}
+                className="bg-background border border-white/10 hover:border-tertiary rounded-xl shadow-md p-0 overflow-hidden transition"
+              >
+                {/* Section Title Bar */}
+                <div className="bg-tertiary/10 border-b border-tertiary px-4 py-3">
+                  <h3 className="text-lg font-bold text-tertiary tracking-wide uppercase">
+                    {sectionTitle}
+                  </h3>
+                </div>
+
+                {/* Feedback Body */}
+                <div className="px-5 py-4">
+                  <ul className="list-disc list-inside space-y-3 text-gray-300 text-sm leading-relaxed">
+                    {points.map((point, i) => (
+                      <li key={i}>{emphasizeKeywords(point)}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
+  );
+};
+
+// ✨ Bold common key terms
+const emphasizeKeywords = (text) => {
+  const keywords = [
+    'should', 'consider', 'important', 'avoid', 'highlight',
+    'recommended', 'lacks', 'strong', 'missing', 'ensure',
+    'add', 'remove', 'improve'
+  ];
+  const regex = new RegExp(`\\b(${keywords.join('|')})\\b`, 'gi');
+  return text.split(regex).map((part, i) =>
+    keywords.includes(part.toLowerCase()) ? (
+      <strong key={i} className="text-white font-semibold">{part}</strong>
+    ) : (
+      <span key={i}>{part}</span>
+    )
   );
 };
 
