@@ -27,5 +27,3 @@
 | **Resume Parsing** | pdfplumber, python-docx |
 | **State & Routing** | React Context API, React Router |
 | **Deployment Ready** | Containerizable backend, frontend proxy config, local Ollama setup |
-
----
