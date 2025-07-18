@@ -7,7 +7,6 @@ import docx
 import os
 import requests
 from dotenv import load_dotenv
-import requests
 # from RAG_engine import retrieve_context, generate_answer
 import json
 from sentence_transformers import SentenceTransformer
@@ -81,64 +80,70 @@ def extract_text_from_docx(file_path: str) -> str:
 
 # Function to generate job roles using Ollama
 def suggest_jobs(user_input: str) -> str:
-    """
-    Send a chat completion request to Ollama's local API.
-    Returns the AI-generated suggestion text.
-    """
     system_message = {
         "role": "system",
         "content": (
             "You are CareerBot, an expert career advisor. "
             "Translate a user's skills and experiences into personalized job role suggestions. "
-            "Always reference specific user skills or experiences. "
             "For each role, emit a Markdown bullet like:\n\n"
-            "  **Role Title**: short explanation  \n"
-            "  Required Skills: a comma-separated list of 6 to 10 specific skills and tools relevant to the job. Include both general and technical terms. \n\n"
-            "Respond with 3–5 such bullets, no extra conclusion."
+            "**Role Title**: short explanation  \n"
+            "Required Skills: a comma-separated list of 6 to 10 specific skills and tools relevant to the job."
         )
     }
 
     few_shot = {
-        "role": "user",
+        "role": "assistant",
         "content": (
-            "**Example 1:**\n"
-            "**Data Analyst**: Your experience with Excel and SQL showcases strong analytical capabilities. This role leverages those skills to derive actionable insights.  \n"
-            "Required Skills: Excel, SQL, Python\n\n"
-            "**Example 2:**\n"
-            "**Technical Writer**: Your clear documentation during past projects highlights your ability to translate complex concepts. In this role, you'd produce precise technical guides.  \n"
-            "Required Skills: Writing, Attention to Detail, Markdown\n\n"
-            "---"
+            "**Data Analyst**: You’ve used SQL and Excel in past internships to explore trends. Perfect for analyzing data.  \n"
+            "Required Skills: Excel, SQL, Python, Tableau\n\n"
+            "**Software QA Tester**: Your attention to detail and documentation skills suit software testing roles.  \n"
+            "Required Skills: Testing, Selenium, Python, Jira\n\n"
         )
     }
 
     user_message = {
         "role": "user",
-        "content": f"Here is the user's skills and experiences:\n{user_input}\n\nBased on this, suggest 3 to 5 career roles as bullet points following the format above."
+        "content": f"Here is the user's skills and experiences:\n{user_input}\n\nSuggest 3–5 jobs as bullet points in that format."
     }
 
     payload = {
         "model": "mistral:instruct",
         "messages": [system_message, few_shot, user_message],
-        "temperature": 0.7
+        "temperature": 0.7,
+        "stream": True
     }
 
-    # response = requests.post(OLLAMA_URL, json=payload)
-    # response.raise_for_status()
-    # return response.json()["choices"][0]["message"]["content"].strip()
-    response = requests.post(OLLAMA_URL, json=payload, stream=True)
-    response.raise_for_status()
+    try:
+        response = requests.post(OLLAMA_URL, json=payload, stream=True)
+        response.raise_for_status()
 
-    full_content = ""
-    for line in response.iter_lines():
-        if not line:
-            continue
-        obj = json.loads(line.decode("utf-8"))
-        part = obj.get("message", {}).get("content", "")
-        full_content += part
-        if obj.get("done") is True:
-            break
+        full_response = ""
+        for line in response.iter_lines():
+            if not line:
+                continue
+            try:
+                obj = json.loads(line.decode("utf-8"))
+                content = obj.get("message", {}).get("content", "")
+                full_response += content
+            except json.JSONDecodeError:
+                continue
 
-    return full_content.strip()
+        full_response = full_response.strip()
+
+        if not full_response or "**" not in full_response:
+            print("[❌] Invalid or empty suggestions")
+            return None
+
+        print("[✅] Suggestions OK:\n", full_response[:300])
+        return full_response
+
+    except requests.RequestException as e:
+        print("[❌] Ollama request failed:", str(e))
+        return None
+
+
+
+
 
 @app.post("/upload-resume/")
 async def upload_resume(file: UploadFile = File(None), skills: str = Form(None)):
@@ -164,9 +169,22 @@ async def upload_resume(file: UploadFile = File(None), skills: str = Form(None))
     else:
         return {"error": "No input provided. Please upload a resume or enter skills."}
 
-    # Get job suggestions
     suggestions = suggest_jobs(user_input)
-    return {"job_suggestions": suggestions}
+
+    # ✅ Ensure suggestions are valid
+    if not suggestions or "No job suggestions found" in suggestions:
+        print("[❌] Returning empty job_suggestions to frontend")
+        return {
+            "job_suggestions": "",
+            "resume_text": user_input,
+            "error": "No suggestions could be generated."
+        }
+
+    print("[✅] Suggestions received:\n", suggestions)
+    return {
+        "job_suggestions": suggestions,
+        "resume_text": user_input
+    }
 
 
 @app.post("/resume-feedback/")
@@ -285,20 +303,28 @@ Resume:
     payload = {
         "model": "mistral:instruct",
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.7
+        "temperature": 0.7,
+        "stream": True  # ✅ make sure to request streaming
     }
 
-    response = requests.post(OLLAMA_URL, json=payload, stream=True)
-    response.raise_for_status()
+    try:
+        response = requests.post(OLLAMA_URL, json=payload, stream=True)
+        response.raise_for_status()
 
-    full_content = ""
-    for line in response.iter_lines():
-        if not line:
-            continue
-        obj = json.loads(line.decode("utf-8"))
-        part = obj.get("message", {}).get("content", "")
-        full_content += part
-        if obj.get("done") is True:
-            break
+        full_content = ""
 
-    return full_content.strip()
+        for line in response.iter_lines():
+            if not line:
+                continue
+            try:
+                obj = json.loads(line.decode("utf-8"))
+                part = obj.get("message", {}).get("content", "")
+                full_content += part
+            except json.JSONDecodeError:
+                continue  # Skip malformed chunks
+
+        return full_content.strip()
+
+    except requests.RequestException as e:
+        print("[❌] Ollama feedback request failed:", str(e))
+        return "Error generating feedback."

@@ -24,68 +24,85 @@ function HomePage() {
   }
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
-    setLoading(true)
+    e.preventDefault();
+    setLoading(true);
 
-    // Create two separate FormData objects (because FormData is stream-like and can't be reused)
-    const formData1 = new FormData()
-    const formData2 = new FormData()
+    const formData = new FormData();
 
     if (file) {
-      formData1.append('file', file)
-      formData2.append('file', file)
+      formData.append('file', file);
     } else if (skills.trim()) {
-      formData1.append('skills', skills)
-      formData2.append('skills', skills)
+      formData.append('skills', skills);
     } else {
-      alert('Please upload a resume or enter your skills.')
-      setLoading(false)
-      return
+      alert('Please upload a resume or enter your skills.');
+      setLoading(false);
+      return;
     }
 
     try {
-      // Run both requests in parallel
-      const [res, feedbackRes] = await Promise.all([
-        fetch('http://127.0.0.1:8000/upload-resume/', {
-          method: 'POST',
-          body: formData1
-        }),
-        fetch('http://127.0.0.1:8000/resume-feedback/', {
-          method: 'POST',
-          body: formData2
-        })
-      ])
+      // 📤 Upload resume or skills
+      const res = await fetch('http://127.0.0.1:8000/upload-resume/', {
+        method: 'POST',
+        body: formData
+      });
 
-      // Handle errors
-      if (!res.ok || !feedbackRes.ok) {
-        throw new Error('Server error')
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Resume upload failed');
       }
 
-      const data = await res.json()
-      const feedbackData = await feedbackRes.json()
-
+      // ✅ Store resume text for ATS
       if (data.resume_text) {
-        localStorage.setItem("resume_text", data.resume_text)
+        localStorage.setItem("resume_text", data.resume_text);
+        console.log("📄 Resume Text Preview:", data.resume_text.slice(0, 200));
       }
 
-      if (data.job_suggestions) {
-        setSuggestions(data.job_suggestions)
+      // ✅ Store job suggestions
+      if (
+        data.error || 
+        !data.job_suggestions || 
+        data.job_suggestions.trim() === "" || 
+        data.job_suggestions.includes("No job suggestions")
+      ) {
+        console.warn("⚠️ Invalid job suggestions:", data.error || data.job_suggestions);
+        setSuggestions("");
       } else {
-        alert('No job suggestions received.')
+        console.log("✅ Valid job suggestions received");
+        setSuggestions(data.job_suggestions);
       }
 
-      if (feedbackData.feedback) {
-        setFeedback(feedbackData.feedback)
+      // ✅ Only fetch resume feedback if a file was uploaded
+      if (file) {
+        const feedbackForm = new FormData();
+        feedbackForm.append('file', file);
+
+        const feedbackRes = await fetch('http://127.0.0.1:8000/resume-feedback/', {
+          method: 'POST',
+          body: feedbackForm
+        });
+
+        const feedbackData = await feedbackRes.json();
+
+        if (!feedbackRes.ok) {
+          throw new Error(feedbackData.error || 'Resume feedback failed');
+        }
+
+        if (feedbackData.feedback) {
+          console.log("📝 Resume feedback received");
+          setFeedback(feedbackData.feedback);
+        }
       }
 
-      navigate('/results')
+      navigate('/results');
     } catch (err) {
-      console.error('❌ Upload failed:', err)
-      alert('Something went wrong.')
+      console.error('❌ Upload failed:', err);
+      alert('Something went wrong.');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
+
 
 
   return (

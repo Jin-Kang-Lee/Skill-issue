@@ -5,22 +5,25 @@ import { ExclamationTriangleIcon, DocumentTextIcon } from '@heroicons/react/24/o
 const ResumeFeedbackPage = () => {
   const { feedback } = useContext(SuggestionsContext);
 
-  const sections = {};
-
-  if (feedback) {
-    const lines = feedback.split('\n').map(line => line.trim()).filter(Boolean);
-    let currentSection = null;
-
-    for (const line of lines) {
-      const sectionMatch = line.match(/^(\d+\.)?\s*(Summary|Work Experience|Skills|Education|Formatting|Overall Suggestions)/i);
-      if (sectionMatch) {
-        currentSection = sectionMatch[0].replace(/^(\d+\.)?\s*/, '').trim();
-        sections[currentSection] = [];
-      } else if (currentSection) {
-        sections[currentSection].push(line);
+  const parsedSections = React.useMemo(() => {
+    const sections = {};
+    if (feedback && feedback.trim()) {
+      const lines = feedback.split('\n').map(line => line.trim()).filter(Boolean);
+      let currentSection = null;
+      for (const line of lines) {
+        const sectionMatch = line.match(/^(\d+\.)?\s*(Summary|Work Experience|Skills|Education|Formatting(?: & Structure)?|Overall Suggestions)/i);
+        if (sectionMatch) {
+          currentSection = sectionMatch[0].replace(/^(\d+\.)?\s*/, '').trim();
+          sections[currentSection] = [];
+        } else if (currentSection) {
+          if (!sections[currentSection]) sections[currentSection] = [];
+          sections[currentSection].push(line);
+        }
       }
     }
-  }
+    return sections;
+  }, [feedback]);
+
 
   return (
     <div className="min-h-screen bg-background text-white px-6 py-16">
@@ -39,7 +42,7 @@ const ResumeFeedbackPage = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {Object.entries(sections).map(([sectionTitle, points], idx) => (
+            {Object.entries(parsedSections).map(([sectionTitle, points], idx) => (
               <div
                 key={idx}
                 className="bg-background border border-white/10 hover:border-tertiary rounded-xl shadow-md p-0 overflow-hidden transition"
