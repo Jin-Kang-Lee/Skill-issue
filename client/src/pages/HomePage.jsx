@@ -2,7 +2,6 @@ import React, { useState, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   DocumentArrowUpIcon,
-  SparklesIcon,
   ClipboardDocumentListIcon
 } from '@heroicons/react/24/solid'
 import { SuggestionsContext } from '../context/SuggestionsContext'
@@ -106,54 +105,118 @@ function HomePage() {
 
 
   return (
-    <div className="relative min-h-screen bg-background text-white px-6 pb-12 flex items-center justify-center overflow-hidden">
-      {/* SVG background wave */}
-      <img
-        src="/homepage-waves.svg"
-        alt="wave"
-        className="absolute bottom-0 left-0 w-full pointer-events-none z-0"
-      />
-
-      {/* Main content */}
-      <div className="relative z-10 w-full max-w-6xl grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-        {/* Left side text */}
-        <div className="mt-[-100px]">
-          <h1 className="text-4xl font-extrabold text-primary mb-4">
-            Unlock Your Career Potential with AI
+    <div className="min-h-screen bg-background px-4 py-4">
+      <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+        {/* Left text */}
+        <div className="mt-8 md:mt-16 max-w-xl">
+          <h1 className="text-5xl font-extrabold mb-6 leading-tight">
+            <span className="text-heading">AI-Powered Career Sidekick </span>
+            <span className="text-accent font-semibold italic block">
+              Land your dream job
+            </span>
           </h1>
-          <p className="text-white text-lg leading-relaxed">
-            Harness the power of artificial intelligence to analyze your resume or listed skills,
-            providing personalized job role suggestions and current listings tailored to your unique profile.
+          <p className="text-lg text-heading">
+            Struggling to tailor your resume or figure out which jobs suit you best?
+            Our AI-powered platform analyzes your resume or skills and delivers instant, personalized career paths and improvement tips — all in real time.
           </p>
+          <button
+            onClick={() => {
+              document.getElementById('upload-section')?.scrollIntoView({ behavior: 'smooth' });
+            }}
+            className="mt-6 px-5 py-3 bg-accent text-white font-medium rounded-lg hover:bg-tertiary transition"
+          >
+            Start Now!
+          </button>
         </div>
 
-        {/* Right side form */}
-        <div className="bg-white bg-opacity-90 backdrop-blur-md border border-gray-200 shadow-xl rounded-2xl p-8 text-background">
+        {/* Right SVG */}
+        <div className="flex justify-center md:justify-end">
+          <img src="Design.svg" alt="Illustration" className="w-full max-w-sm md:max-w-md" />
+        </div>
+      </div>
+
+
+      {/* Features Section - Card Boxes */}
+      <div className="mt-24 px-4">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-12">
+          {/* Card 1 */}
+          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100 hover:shadow-lg transition">
+            <h3 className="text-lg font-bold text-[#1D1D4E] mb-2">Smart Matching</h3>
+            <p className="text-md text-[#4A4A68]">Instantly discover job roles that align with your resume or listed skills using our intelligent engine.</p>
+            <a
+              href="https://github.com/Jin-Kang-Lee/Skill-issue"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 inline-block text-[#6C63FF] font-medium text-sm hover:underline"
+            >
+              View on GitHub →
+            </a>
+          </div>
+
+          {/* Card 2 */}
+          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100 hover:shadow-lg transition">
+            <h3 className="text-lg font-bold text-[#1D1D4E] mb-2">Resume Analysis</h3>
+            <p className="text-md text-[#4A4A68]">Analyze your resume instantly to uncover key strengths, areas for improvement, and how it stacks up against in-demand job listings.</p>
+            <a
+              href="https://github.com/Jin-Kang-Lee/Skill-issue"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 inline-block text-[#6C63FF] font-medium text-sm hover:underline"
+            >
+              View on GitHub →
+            </a>
+          </div>
+
+          {/* Card 3 */}
+          <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100 hover:shadow-lg transition">
+            <h3 className="text-lg font-bold text-[#1D1D4E] mb-2">Live Suggestions</h3>
+            <p className="text-md text-[#4A4A68]">Browse a curated selection of real-time job openings, carefully matched to your unique skills, experience, and career aspirations.</p>
+            <a
+              href="https://github.com/Jin-Kang-Lee/Skill-issue"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 inline-block text-[#6C63FF] font-medium text-sm hover:underline"
+            >
+              View on GitHub →
+            </a>
+          </div>
+        </div>
+      </div>
+      
+      
+      {/* Upload Section Wrapper */}
+      <div className="flex flex-col lg:flex-row justify-between items-start gap-10 max-w-7xl mx-auto px-4" style={{ marginTop: '10rem' }}>
+            {/* Upload Form */}
+        <div id="upload-section" className=" bg-white shadow-lg border border-gray-200 rounded-2xl w-full lg:w-2/3 p-10"> 
           <div className="text-center mb-6">
-            <SparklesIcon className="w-8 h-8 mx-auto text-tertiary mb-1" />
-            <h2 className="text-xl font-bold text-tertiary">
-              Get Personalized Job Suggestions
-            </h2>
+            <h2 className="text-2xl font-bold text-accent">Get Personalized Job Suggestions</h2>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-background mb-2">
-                <div className="flex items-center gap-2">
-                  <DocumentArrowUpIcon className="w-5 h-5 text-primary" />
-                  Upload Resume (PDF or DOCX)
-                </div>
+            {/* File Upload */}
+            <div className="border-2 border-dashed border-accent rounded-lg px-6 py-6 text-center hover:border-tertiary transition duration-200">
+              <DocumentArrowUpIcon className="w-8 h-8 text-accent mx-auto mb-2" />
+              <p className="text-sm text-paragraph">Drag & drop your resume here</p>
+              <p className="text-sm text-paragraph mb-3">or</p>
+              
+              <label
+                htmlFor="fileInput"
+                className="inline-block px-4 py-2 bg-accent text-white rounded-md hover:bg-tertiary transition cursor-pointer"
+              >
+                Browse Files
+                <input
+                  id="fileInput"
+                  type="file"
+                  accept=".pdf,.docx"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
               </label>
-              <input
-                type="file"
-                accept=".pdf,.docx"
-                onChange={handleFileChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
             </div>
 
+            {/* Skills Field */}
             <div>
-              <label className="block text-sm font-medium text-background mb-2">
+              <label className="block text-sm font-medium text-heading mb-2">
                 <div className="flex items-center gap-2">
                   <ClipboardDocumentListIcon className="w-5 h-5 text-primary" />
                   Or Enter Skills
@@ -163,37 +226,23 @@ function HomePage() {
                 value={skills}
                 onChange={handleSkillsChange}
                 placeholder="e.g. React, Python, Communication, Data Analysis"
-                rows="4"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary"
+                rows="3"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent placeholder-gray-400"
               />
             </div>
 
+            {/* Submit Button */}
             <button
               type="submit"
               disabled={loading}
-              className={`w-full py-3 font-semibold rounded-lg transition-all flex items-center justify-center ${
-                loading
-                  ? 'bg-primary text-white cursor-not-allowed'
-                  : 'bg-accent hover:bg-primary text-white'
+              className={`w-full py-3 rounded-lg font-semibold flex justify-center items-center transition ${
+                loading ? 'bg-primary text-white cursor-not-allowed' : 'bg-accent hover:bg-tertiary text-white'
               }`}
             >
               {loading ? (
-                <svg className="animate-spin h-6 w-6 text-tertiary"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8v8H4z"
-                  />
+                <svg className="animate-spin h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                 </svg>
               ) : (
                 'Get Suggestions'
@@ -201,13 +250,32 @@ function HomePage() {
             </button>
           </form>
 
-          <div className="mt-6 text-center text-sm text-gray-500">
+          <p className="mt-6 text-center text-sm text-paragraph">
             We do not store your data. Your information is used only to generate suggestions.
-          </div>
+          </p>
+        </div>
+
+        {/* Instruction Section – Right Side of Form */}
+        <div className="max-w-md mt-10 lg:mt-0">
+          <h2 className="text-3xl font-extrabold leading-snug mb-4 text-heading">
+            <span>How it works,</span>
+            <span className="text-accent italic block">in just 3 steps</span>
+          </h2>
+          <p className="text-heading text-base mb-6">
+            Upload your resume or enter your skills. And we'll scans your profile,
+            finds the most relevant job roles, and gives you clear feedback on how to improve.
+          </p>
+          <ul className="text-md text-paragraph space-y-3 list-disc list-inside">
+            <li>1. Drop in your resume or type in your skills manually</li>
+            <li>2. Get instant feedback and job suggestions tailored to you</li>
+            <li>3. 100% private — nothing is stored</li>
+          </ul>
         </div>
       </div>
+        
     </div>
   )
+
 }
 
 export default HomePage
