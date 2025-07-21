@@ -2,6 +2,7 @@ import React, { useContext } from 'react';
 import { SuggestionsContext } from '../context/SuggestionsContext';
 import { ExclamationTriangleIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
 
+
 const ResumeFeedbackPage = () => {
   const { feedback } = useContext(SuggestionsContext);
 
@@ -26,37 +27,40 @@ const ResumeFeedbackPage = () => {
 
 
   return (
-    <div className="min-h-screen bg-background text-white px-6 py-16">
+    <div className="min-h-screen bg-background px-6 py-16 text-heading">
       <div className="max-w-7xl mx-auto">
-        <h2 className="text-4xl font-bold text-center mb-12 flex items-center justify-center gap-3">
-          <DocumentTextIcon className="w-8 h-8 text-tertiary" />
-          Resume Feedback
+        {/* Header */}
+        <h2 className="text-4xl font-extrabold text-center mb-12 flex items-center justify-center gap-3">
+          <DocumentTextIcon className="w-8 h-8 text-accent" />
+          <span className="text-accent">Resume Feedback</span>
         </h2>
 
+        {/* No Feedback Message */}
         {!feedback ? (
-          <div className="bg-white/10 border border-white/20 text-white p-6 rounded-lg flex items-center gap-4 shadow-inner">
+          <div className="bg-white/10 border border-white/20 p-6 rounded-lg flex items-center gap-4 shadow-inner text-white">
             <ExclamationTriangleIcon className="w-8 h-8 text-yellow-400" />
             <p className="text-lg">
-              No feedback found. Please upload your resume from the <strong>Home</strong> page.
+              No feedback found. Please upload your resume from the <strong className="text-accent">Home</strong> page.
             </p>
           </div>
         ) : (
+          // Feedback Grid
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {Object.entries(parsedSections).map(([sectionTitle, points], idx) => (
               <div
                 key={idx}
-                className="bg-background border border-white/10 hover:border-tertiary rounded-xl shadow-md p-0 overflow-hidden transition"
+                className="bg-background border border-white/10 hover:border-tertiary rounded-xl shadow-md transition overflow-hidden"
               >
-                {/* Section Title Bar */}
-                <div className="bg-tertiary/10 border-b border-tertiary px-4 py-3">
-                  <h3 className="text-lg font-bold text-tertiary tracking-wide uppercase">
+                {/* Section Header */}
+                <div className="bg-tertiary/10 border-b border-accent px-4 py-3">
+                  <h3 className="text-md font-bold text-accent uppercase tracking-wide">
                     {sectionTitle}
                   </h3>
                 </div>
 
-                {/* Feedback Body */}
+                {/* Section Feedback */}
                 <div className="px-5 py-4">
-                  <ul className="list-disc list-inside space-y-3 text-gray-300 text-sm leading-relaxed">
+                  <ul className="list-disc list-inside space-y-3 text-heading text-sm leading-relaxed">
                     {points.map((point, i) => (
                       <li key={i}>{emphasizeKeywords(point)}</li>
                     ))}

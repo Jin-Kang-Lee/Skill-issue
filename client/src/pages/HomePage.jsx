@@ -212,6 +212,20 @@ function HomePage() {
                   className="hidden"
                 />
               </label>
+              {file && (
+                <div className="mt-2 flex items-center justify-center gap-2">
+                  <p className="text-sm text-heading">
+                    Selected file: <span className="font-medium text-accent">{file.name}</span>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setFile(null)}
+                    className="text-sm text-red-500 hover:underline"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Skills Field */}

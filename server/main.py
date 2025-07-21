@@ -110,25 +110,16 @@ def suggest_jobs(user_input: str) -> str:
         "model": "mistral:instruct",
         "messages": [system_message, few_shot, user_message],
         "temperature": 0.7,
-        "stream": True
+        "stream": False
     }
 
     try:
-        response = requests.post(OLLAMA_URL, json=payload, stream=True)
+        payload["stream"] = False  # Turn off streaming mode
+        response = requests.post(OLLAMA_URL, json=payload)
         response.raise_for_status()
 
-        full_response = ""
-        for line in response.iter_lines():
-            if not line:
-                continue
-            try:
-                obj = json.loads(line.decode("utf-8"))
-                content = obj.get("message", {}).get("content", "")
-                full_response += content
-            except json.JSONDecodeError:
-                continue
-
-        full_response = full_response.strip()
+        data = response.json()
+        full_response = data["choices"][0]["message"]["content"].strip()
 
         if not full_response or "**" not in full_response:
             print("[❌] Invalid or empty suggestions")
@@ -140,6 +131,7 @@ def suggest_jobs(user_input: str) -> str:
     except requests.RequestException as e:
         print("[❌] Ollama request failed:", str(e))
         return None
+
 
 
 
@@ -304,27 +296,19 @@ Resume:
         "model": "mistral:instruct",
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.7,
-        "stream": True  # ✅ make sure to request streaming
+        "stream": False
     }
 
     try:
-        response = requests.post(OLLAMA_URL, json=payload, stream=True)
+        payload["stream"] = False  # Ensure streaming is disabled
+        response = requests.post(OLLAMA_URL, json=payload)
         response.raise_for_status()
 
-        full_content = ""
-
-        for line in response.iter_lines():
-            if not line:
-                continue
-            try:
-                obj = json.loads(line.decode("utf-8"))
-                part = obj.get("message", {}).get("content", "")
-                full_content += part
-            except json.JSONDecodeError:
-                continue  # Skip malformed chunks
-
-        return full_content.strip()
+        data = response.json()
+        full_content = data["choices"][0]["message"]["content"].strip()
+        return full_content
 
     except requests.RequestException as e:
         print("[❌] Ollama feedback request failed:", str(e))
         return "Error generating feedback."
+
