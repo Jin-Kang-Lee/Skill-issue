@@ -26,30 +26,45 @@ function ResultsPage() {
   
   for (let i = 0; i < roleLines.length; i++) {
     const line = roleLines[i];
-    const roleMatch = line.match(/^\*\*(.+?)\*\*:\s*(.+)/);
 
-    if (roleMatch) {
-      const description = roleMatch[2].trim();
+    // Attempt to match role title and description
+    const match = line.match(/^\*\*(.+?)\*\*:\s*(.+)/);
 
-      let requiredSkills = [];
-      let requiredLine = ""; // ✅ Add this
-      if (i + 1 < roleLines.length && /Required Skills:/i.test(roleLines[i + 1])) {
-        requiredLine = roleLines[i + 1].trim(); // ✅ Save full string for UI
-        const skillLine = requiredLine.split(':')[1] || '';
-        requiredSkills = skillLine.split(',').map(s => s.trim()).filter(Boolean);
-        i++; // skip next line
-      }
+    let title = "Unknown Role";
+    let description = "";
+    let requiredSkills = [];
+    let requiredLine = "";
 
-      groupedRoles.push({
-        job: line,
-        required: requiredLine,     // ✅ this restores the UI text
-        requiredSkills,             // ✅ this supports ATS logic
-        description,
-      });
+    if (match) {
+      title = match[1].trim();
+      description = match[2].trim();
+    } else if (line.includes("**") && line.includes(":")) {
+      // Backup parsing if format is messy but contains both
+      const parts = line.split(":");
+      title = parts[0].replace(/\*/g, "").trim();
+      description = parts[1].trim();
     } else {
-      groupedRoles.push({ job: line });
+      // Last fallback: use entire line as title
+      title = line.trim();
     }
+
+    // Check if next line contains required skills
+    if (i + 1 < roleLines.length && /Required Skills:/i.test(roleLines[i + 1])) {
+      requiredLine = roleLines[i + 1].trim();
+      const skillLine = requiredLine.split(':')[1] || '';
+      requiredSkills = skillLine.split(',').map(s => s.trim()).filter(Boolean);
+      i++; // skip next line
+    }
+
+    groupedRoles.push({
+      job: line,
+      required: requiredLine,
+      requiredSkills,
+      description,
+      parsedTitle: title,
+    });
   }
+
 
   const [activeIndex, setActiveIndex] = useState(null)
   const [links, setLinks] = useState({})
@@ -79,8 +94,7 @@ function ResultsPage() {
   // Automatically fetch all job links once suggestions are parsed
   useEffect(() => {
     groupedRoles.forEach((role, idx) => {
-      const match = role.job.match(/\*\*(.+?)\*\*:\s*(.+)/);
-      const title = match ? match[1] : role.job.trim();
+      const title = role.parsedTitle || "Untitled Role";
 
       if (!links[idx]) {
         fetch(`http://localhost:8000/api/search-links/?role=${encodeURIComponent(title)}`)
@@ -138,11 +152,11 @@ function ResultsPage() {
           Job Role Suggestions
         </h2>
 
-        <div className="grid sm:grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-start">
+        <div className="flex flex-col gap-6">
           {groupedRoles.map((role, idx) => {
             const match = role.job.match(/\*\*(.+?)\*\*:\s*(.+)/)
             const title = match ? match[1] : role.job.trim()
-            const description = match ? match[2] : ''
+            const description = role.description || ''
             const roleLinks = links[idx] || []
             const { gradient, watermarkIcon } = getGradientAndIcon(title);
             const icons = [
@@ -158,79 +172,102 @@ function ResultsPage() {
             return (
               <div
                 key={idx}
-                className="group relative bg-white border border-gray-200 rounded-2xl px-6 py-5 shadow-sm hover:shadow-md transition-all flex flex-col min-h-[240px] hover:scale-[1.02] duration-300 overflow-hidden"
+                className="group flex justify-between items-center bg-white border border-gray-200 rounded-2xl px-6 py-5 shadow-sm hover:shadow-md transition-all hover:scale-[1.01] duration-300"
               >
-                {/* Top Gradient Accent Bar */}
-                <div className={`absolute top-0 left-0 h-1 w-full bg-gradient-to-r ${gradient} rounded-t-2xl`} />
-
-                {/* Top Icon and Title */}
-                <div className="flex flex-col items-center text-center mb-3">
-                  <Icon className="w-8 h-8 text-accent mb-1" />
-                  <h3 className="text-2xl font-bold text-gray-900">{title}</h3>
-                </div>
-
-                {/* Growable middle content */}
-                <div className="flex flex-col flex-grow justify-start">
-                  {/* JOB LINKS */}
-                  <div className="flex flex-wrap gap-2 justify-center mb-2">
-                    {roleLinks.length > 0 ? (
-                      roleLinks.map((l, i) => (
-                        <a
-                          key={i}
-                          href={l.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-3 py-1 bg-gray-100 text-gray-800 text-sm font-medium rounded-full shadow-sm border border-gray-200 hover:bg-gray-200 transition"
-                        >
-                          {l.site}
-                        </a>
-                      ))
-                    ) : (
-                      <span className="text-xs text-gray-400">No links</span>
-                    )}
+                {/* Left Side Content */}
+                <div className="flex items-start gap-4 flex-1">
+                  {/* Role Icon */}
+                  <div className="flex-shrink-0">
+                    <Icon className="w-10 h-10 text-accent" />
                   </div>
 
-                  {/* HIDDEN HOVER DESCRIPTION */}
-                  <div className="overflow-hidden max-h-0 opacity-0 group-hover:max-h-[160px] group-hover:opacity-100 transition-all duration-300 ease-in-out mt-2 flex flex-col gap-1 text-left">
-                    <p className="text-sm text-black-800">{description}</p>
+                  {/* Title + Description */}
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">{title}</h3>
+                    <p className="text-sm text-gray-600 mt-1 line-clamp-2">{description}</p>
+
+                    {/* Tags like job links */}
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {roleLinks.length > 0 ? (
+                        roleLinks.map((l, i) => (
+                          <a
+                            key={i}
+                            href={l.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1 bg-gray-100 text-gray-800 text-xs font-medium rounded-full border border-gray-200 hover:bg-gray-200 transition"
+                          >
+                            {l.site}
+                          </a>
+                        ))
+                      ) : (
+                        <span className="text-xs text-gray-400">No links</span>
+                      )}
+                    </div>
+
+                    {/* Optional required skills */}
                     {role.required && (
-                      <p className="text-xs italic text-gray-500 mt-4">{role.required}</p>
+                      <p className="text-xs italic text-gray-500 mt-2">{role.required}</p>
                     )}
                   </div>
                 </div>
 
-                {/* ATS Button */}
-                <div className="pt-4">
-                  <div className="border-t border-gray-200 my-4"></div>
+                {/* Right Side: ATS Button */}
+                <div className="ml-6 flex flex-col items-end justify-center">
                   <button
                     onClick={() => {
-                      handleATSCheck(title, role.requiredSkills || [])
-                      setAtsVisibleIndex(idx)
+                      if (atsVisibleIndex === idx) {
+                        // If already open, close it
+                        setAtsVisibleIndex(null);
+                      } else {
+                        // Otherwise, fetch and show
+                        handleATSCheck(title, role.requiredSkills || []);
+                        setAtsVisibleIndex(idx);
+                      }
                     }}
-                    className="bg-accent text-white w-full text-sm font-semibold px-4 py-2 rounded-lg hover:bg-accent transition"
+                    className="bg-accent text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-accent transition"
                   >
                     Check ATS Fit
                   </button>
 
-                  {/* ATS RESULTS */}
-                  {atsScores[title] && atsVisibleIndex === idx && (
-                    <div className="mt-4 bg-gray-50 border border-gray-200 p-4 rounded-lg text-sm">
-                      <p className="text-gray-800 mb-1">
-                        ATS Match Score: <strong>{atsScores[title].score}%</strong>
+                  {atsScores[title] && (
+                    <div
+                      className={`absolute right-6 top-20 bg-white border border-gray-200 rounded-xl shadow-md p-4 z-10 w-72 text-sm transition-all duration-300 ease-in-out ${
+                        atsVisibleIndex === idx ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                      }`}
+                    >
+                      <p className="text-gray-800 mb-2">
+                        ATS Score: <strong>{atsScores[title].score}%</strong>
                       </p>
-                      <p className="text-green-600">
-                        ✅ Matched Skills: {atsScores[title].matched_skills.join(', ') || 'None'}
-                      </p>
-                      <p className="text-red-500">
-                        ❌ Missing Skills: {atsScores[title].missing_skills.join(', ') || 'None'}
-                      </p>
+
+                      {/* ✅ Matched Skills */}
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {atsScores[title].matched_skills.map((skill, i) => (
+                          <span
+                            key={i}
+                            className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full"
+                          >
+                            ✅ {skill}
+                          </span>
+                        ))}
+                      </div>
+
+                      {/* ❌ Missing Skills */}
+                      <div className="flex flex-wrap gap-2">
+                        {atsScores[title].missing_skills.map((skill, i) => (
+                          <span
+                            key={i}
+                            className="bg-red-100 text-red-700 text-xs font-medium px-2 py-1 rounded-full"
+                          >
+                            ❌ {skill}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   )}
+
                 </div>
               </div>
-
-
-
             )
           })}
         </div>

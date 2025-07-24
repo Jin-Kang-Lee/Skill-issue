@@ -1,5 +1,8 @@
 {
   "dependencies": {
-    "@heroicons/react": "^2.2.0"
+    "@heroicons/react": "^2.2.0",
+    "mammoth": "^1.9.1",
+    "pdfjs-dist": "^5.3.93",
+    "react-pdf": "^10.0.1"
   }
 }

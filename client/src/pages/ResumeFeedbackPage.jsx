@@ -1,10 +1,11 @@
-import React, { useContext } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import { SuggestionsContext } from '../context/SuggestionsContext';
 import { ExclamationTriangleIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
 
 
 const ResumeFeedbackPage = () => {
   const { feedback } = useContext(SuggestionsContext);
+
 
   const parsedSections = React.useMemo(() => {
     const sections = {};
@@ -27,52 +28,56 @@ const ResumeFeedbackPage = () => {
 
 
   return (
-    <div className="min-h-screen bg-background px-6 py-16 text-heading">
+    <div className="min-h-screen bg-gray-50 px-6 py-16 text-gray-800">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <h2 className="text-4xl font-extrabold text-center mb-12 flex items-center justify-center gap-3">
           <DocumentTextIcon className="w-8 h-8 text-accent" />
-          <span className="text-accent">Resume Feedback</span>
+          <span className="text-accent">Resume Insights</span>
         </h2>
 
         {/* No Feedback Message */}
         {!feedback ? (
-          <div className="bg-white/10 border border-white/20 p-6 rounded-lg flex items-center gap-4 shadow-inner text-white">
-            <ExclamationTriangleIcon className="w-8 h-8 text-yellow-400" />
-            <p className="text-lg">
-              No feedback found. Please upload your resume from the <strong className="text-accent">Home</strong> page.
+          <div className="bg-white border border-dashed border-gray-300 p-6 rounded-xl flex items-center gap-4 shadow-sm text-gray-700">
+            <ExclamationTriangleIcon className="w-7 h-7 text-yellow-400" />
+            <p className="text-base">
+              <strong className="text-red-500">No feedback found.</strong> Please upload your resume from the <strong className="text-accent">Home</strong> page.
             </p>
           </div>
         ) : (
           // Feedback Grid
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {Object.entries(parsedSections).map(([sectionTitle, points], idx) => (
-              <div
-                key={idx}
-                className="bg-background border border-white/10 hover:border-tertiary rounded-xl shadow-md transition overflow-hidden"
-              >
-                {/* Section Header */}
-                <div className="bg-tertiary/10 border-b border-accent px-4 py-3">
-                  <h3 className="text-md font-bold text-accent uppercase tracking-wide">
-                    {sectionTitle}
-                  </h3>
-                </div>
+          <div className="flex flex-col lg:flex-row gap-8">
 
-                {/* Section Feedback */}
-                <div className="px-5 py-4">
-                  <ul className="list-disc list-inside space-y-3 text-heading text-sm leading-relaxed">
+            {/* Feedback - Right */}
+            <div className="w-full lg:w-1/2 flex flex-col gap-6">
+              {Object.entries(parsedSections).map(([sectionTitle, points], idx) => (
+                <div
+                  key={idx}
+                  className="bg-white border border-gray-100 rounded-2xl shadow-md hover:shadow-lg transition-all p-6"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-bold text-gray-900 tracking-wide">{sectionTitle}</h3>
+                    <span className="text-xs bg-accent/10 text-accent font-semibold px-3 py-1 rounded-full">
+                      Section Feedback
+                    </span>
+                  </div>
+                  <ul className="list-disc list-inside space-y-3 text-sm text-gray-700 leading-relaxed">
                     {points.map((point, i) => (
-                      <li key={i}>{emphasizeKeywords(point)}</li>
+                      <li key={i}><span className="font-medium">{emphasizeKeywords(point)}</span></li>
                     ))}
                   </ul>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
+
         )}
       </div>
     </div>
   );
+
+
+
 };
 
 // ✨ Bold common key terms
@@ -85,11 +90,12 @@ const emphasizeKeywords = (text) => {
   const regex = new RegExp(`\\b(${keywords.join('|')})\\b`, 'gi');
   return text.split(regex).map((part, i) =>
     keywords.includes(part.toLowerCase()) ? (
-      <strong key={i} className="text-white font-semibold">{part}</strong>
+      <strong key={i} className="text-accent font-semibold">{part}</strong>
     ) : (
       <span key={i}>{part}</span>
     )
   );
 };
+
 
 export default ResumeFeedbackPage;

@@ -86,7 +86,7 @@ def suggest_jobs(user_input: str) -> str:
             "You are CareerBot, an expert career advisor. "
             "Translate a user's skills and experiences into personalized job role suggestions. "
             "For each role, emit a Markdown bullet like:\n\n"
-            "**Role Title**: short explanation  \n"
+            "**Role Title**: A concise 2–3 sentence overview of the role. Describe what the person will do, what types of projects they might work on, and why someone with these skills would be a good fit. Keep it professional and beginner-friendly.\n"
             "Required Skills: a comma-separated list of 6 to 10 specific skills and tools relevant to the job."
         )
     }
