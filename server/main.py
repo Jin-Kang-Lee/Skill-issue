@@ -20,7 +20,13 @@ dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
 load_dotenv(dotenv_path)
 
 # Ollama local API endpoint (change via .env if needed)
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434/v1/chat/completions")
+# OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434/v1/chat/completions")
+
+# Together.ai API config
+TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
+TOGETHER_MODEL = os.getenv("TOGETHER_MODEL", "mistralai/Mistral-7B-Instruct-v0.1")
+TOGETHER_API_URL = os.getenv("TOGETHER_API_URL", "https://api.together.xyz/v1/completions")
+
 
 app = FastAPI()
 
@@ -80,53 +86,48 @@ def extract_text_from_docx(file_path: str) -> str:
 
 # Function to generate job roles using Ollama
 def suggest_jobs(user_input: str) -> str:
-    system_message = {
-        "role": "system",
-        "content": (
-            "You are CareerBot, an expert career advisor.\n"
-            "Given a user's skills and experiences, suggest 3–5 jobs they are suitable for.\n\n"
-            "For each job, respond in exactly **2 Markdown lines**:\n"
-            "**Job Title Here**: 1–2 sentence explanation of why this role fits\n"
-            "Required Skills: skill1, skill2, skill3, etc.\n\n"
-            "IMPORTANT RULES:\n"
-            "- Do NOT say 'Job Title' or 'Role Title' literally\n"
-            "- Write the actual job title inside the bold: **Machine Learning Engineer**\n"
-            "- Put the explanation after a colon, on the same line\n"
-            "- Then put 'Required Skills:' on the next line with comma-separated skills\n"
-            "- No extra commentary, blank lines, or bullets — just repeat this 2-line block for each role"
-        )
-    }
+    system_prompt = (
+        "You are CareerBot, an expert career advisor.\n"
+        "Given a user's skills and experiences, suggest 3–5 jobs they are suitable for.\n\n"
+        "For each job, respond in exactly **2 Markdown lines**:\n"
+        "**Job Title Here**: 1–2 sentence explanation of why this role fits\n"
+        "Required Skills: skill1, skill2, skill3, etc.\n\n"
+        "IMPORTANT RULES:\n"
+        "- Do NOT say 'Job Title' or 'Role Title' literally\n"
+        "- Write the actual job title inside the bold: **Machine Learning Engineer**\n"
+        "- Put the explanation after a colon, on the same line\n"
+        "- Then put 'Required Skills:' on the next line with comma-separated skills\n"
+        "- No extra commentary, blank lines, or bullets — just repeat this 2-line block for each role"
+    )
 
-    few_shot = {
-        "role": "assistant",
-        "content": (
-            "**Machine Learning Engineer**: You have strong experience in Python and ML libraries, making you ideal for building predictive models and AI pipelines.\n"
-            "Required Skills: Python, Scikit-learn, Pandas, NumPy, XGBoost, AWS\n\n"
-            "**Full Stack Developer**: Your experience building web apps with React and Laravel positions you well for full-stack roles involving AI integration.\n"
-            "Required Skills: JavaScript, React, FastAPI, Laravel, Tailwind CSS, Git"
-        )
-    }
+    few_shot_example = (
+        "**Machine Learning Engineer**: You have strong experience in Python and ML libraries, making you ideal for building predictive models and AI pipelines.\n"
+        "Required Skills: Python, Scikit-learn, Pandas, NumPy, XGBoost, AWS\n\n"
+        "**Full Stack Developer**: Your experience building web apps with React and Laravel positions you well for full-stack roles involving AI integration.\n"
+        "Required Skills: JavaScript, React, FastAPI, Laravel, Tailwind CSS, Git"
+    )
 
+    user_prompt = f"Here is the user's skills and experiences:\n{user_input}\n\nSuggest 3–5 jobs as bullet points in that format."
 
-    user_message = {
-        "role": "user",
-        "content": f"Here is the user's skills and experiences:\n{user_input}\n\nSuggest 3–5 jobs as bullet points in that format."
-    }
+    full_prompt = f"{system_prompt}\n\n{few_shot_example}\n\n{user_prompt}"
 
     payload = {
-        "model": "mistral:instruct",
-        "messages": [system_message, few_shot, user_message],
+        "model": TOGETHER_MODEL,
+        "prompt": full_prompt,
         "temperature": 0.7,
-        "stream": False
+        "max_tokens": 512
+    }
+
+    headers = {
+        "Authorization": f"Bearer {TOGETHER_API_KEY}",
+        "Content-Type": "application/json"
     }
 
     try:
-        payload["stream"] = False  # Turn off streaming mode
-        response = requests.post(OLLAMA_URL, json=payload)
+        response = requests.post(TOGETHER_API_URL, headers=headers, json=payload)
         response.raise_for_status()
-
         data = response.json()
-        full_response = data["choices"][0]["message"]["content"].strip()
+        full_response = data["choices"][0]["text"].strip()
 
         if not full_response or "**" not in full_response:
             print("[❌] Invalid or empty suggestions")
@@ -136,7 +137,7 @@ def suggest_jobs(user_input: str) -> str:
         return full_response
 
     except requests.RequestException as e:
-        print("[❌] Ollama request failed:", str(e))
+        print("[❌] Together.ai request failed:", str(e))
         return None
 
 
@@ -212,33 +213,36 @@ async def role_info(
     role: str = Form(...),
     skills: str = Form(...)
 ):
-    """
-    Given a selected role and the user's skills, return JSON with:
-    - description: short overview
-    - faqs: list of {question, answer}
-    """
-    system_message = {
-        "role": "system",
-        "content": (
-            "You are CareerBot. "
-            "Given a job role and a user's skills, output ONLY valid JSON with two keys:\n"
-            "1) description: a 2–3 sentence overview of the role\n"
-            "2) faqs: an array of exactly 3 {question, answer} pairs about the role\n"
-        )
-    }
-    user_message = {
-        "role": "user",
-        "content": f"Role: {role}\nUser skills: {skills}\n\nRespond ONLY with JSON."
-    }
+    prompt = f"""
+You are CareerBot. Given the job role and the user's skills below, respond with ONLY valid JSON including:
+
+1) description: a 2–3 sentence overview of the role
+2) faqs: an array of exactly 3 {{"question": "...", "answer": "..."}} pairs
+
+Role: {role}
+User Skills: {skills}
+"""
+
     payload = {
-        "model": "mistral:instruct",
-        "messages": [system_message, user_message],
-        "temperature": 0.7
+        "model": TOGETHER_MODEL,
+        "prompt": prompt,
+        "temperature": 0.7,
+        "max_tokens": 512
     }
-    resp = requests.post(OLLAMA_URL, json=payload)
-    resp.raise_for_status()
-    # Return the raw JSON string from the model
-    return resp.json()["choices"][0]["message"]["content"]
+
+    headers = {
+        "Authorization": f"Bearer {TOGETHER_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    try:
+        response = requests.post(TOGETHER_API_URL, headers=headers, json=payload)
+        response.raise_for_status()
+        return response.json()["choices"][0]["text"].strip()
+    except requests.RequestException as e:
+        print("[❌] Together.ai role_info request failed:", str(e))
+        return {"error": "Unable to generate role information."}
+
 
 
 
@@ -300,22 +304,26 @@ Resume:
 """
 
     payload = {
-        "model": "mistral:instruct",
-        "messages": [{"role": "user", "content": prompt}],
+        "model": TOGETHER_MODEL,
+        "prompt": prompt,
         "temperature": 0.7,
-        "stream": False
+        "max_tokens": 768
+    }
+
+    headers = {
+        "Authorization": f"Bearer {TOGETHER_API_KEY}",
+        "Content-Type": "application/json"
     }
 
     try:
-        payload["stream"] = False  # Ensure streaming is disabled
-        response = requests.post(OLLAMA_URL, json=payload)
+        response = requests.post(TOGETHER_API_URL, headers=headers, json=payload)
         response.raise_for_status()
 
         data = response.json()
-        full_content = data["choices"][0]["message"]["content"].strip()
+        full_content = data["choices"][0]["text"].strip()
         return full_content
 
     except requests.RequestException as e:
-        print("[❌] Ollama feedback request failed:", str(e))
+        print("[❌] Together.ai feedback request failed:", str(e))
         return "Error generating feedback."
 
