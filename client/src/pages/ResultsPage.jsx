@@ -78,7 +78,7 @@ function ResultsPage() {
       const title = role.parsedTitle || "Untitled Role";
 
       if (!links[idx]) {
-        fetch(`${process.env.REACT_APP_API_BASE_URL}/api/search-links/?role=${encodeURIComponent(title)}`)
+        fetch(`https://skill-issue-backend.onrender.com/api/search-links/?role=${encodeURIComponent(title)}`)
           .then((res) => res.json())
           .then((data) => {
             setLinks((prev) => ({ ...prev, [idx]: data }));
@@ -109,7 +109,7 @@ function ResultsPage() {
     console.log("With requiredSkills:", requiredSkills)
 
     try {
-      const res = await fetch(`${process.env.REACT_APP_API_BASE_URL}/ats-score/`, {
+      const res = await fetch(`https://skill-issue-backend.onrender.com/ats-score/`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: form,

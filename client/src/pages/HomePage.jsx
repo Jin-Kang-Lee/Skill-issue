@@ -40,7 +40,7 @@ function HomePage() {
 
     try {
       // 📤 Upload resume or skills
-      const res = await fetch('http://127.0.0.1:8000/upload-resume/', {
+      const res = await fetch('https://skill-issue-backend.onrender.com/upload-resume/', {
         method: 'POST',
         body: formData
       });
@@ -76,7 +76,7 @@ function HomePage() {
         const feedbackForm = new FormData();
         feedbackForm.append('file', file);
 
-        const feedbackRes = await fetch('http://127.0.0.1:8000/resume-feedback/', {
+        const feedbackRes = await fetch('https://skill-issue-backend.onrender.com/resume-feedback/', {
           method: 'POST',
           body: feedbackForm
         });
