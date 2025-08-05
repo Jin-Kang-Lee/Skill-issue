@@ -30,14 +30,18 @@ TOGETHER_API_URL = os.getenv("TOGETHER_API_URL", "https://api.together.xyz/v1/co
 
 app = FastAPI()
 
-origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://skill-issueai.netlify.app"
+]
 
 
 # Allow frontend to talk to this backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000",
-                    "http://127.0.0.1:3000"],  # adjust if your frontend URL differs
+    allow_origins=origins,  # include Netlify here
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
