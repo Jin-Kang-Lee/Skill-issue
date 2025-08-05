@@ -11,7 +11,7 @@ node_modules/
 npm-debug.log
 yarn-debug.log
 yarn-error.log
-build/             # Optional: if you're deploying frontend elsewhere like Netlify
+build/            
 
 # ========== Docker ==========
 .dockerignore
