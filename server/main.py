@@ -92,26 +92,32 @@ def extract_text_from_docx(file_path: str) -> str:
 def suggest_jobs(user_input: str) -> str:
     system_prompt = (
         "You are CareerBot, an expert career advisor.\n"
-        "Given a user's skills and experiences, suggest 3–5 jobs they are suitable for.\n\n"
-        "For each job, respond in exactly **2 Markdown lines**:\n"
-        "**Job Title Here**: 1–2 sentence explanation of why this role fits\n"
-        "Required Skills: skill1, skill2, skill3, etc.\n\n"
-        "IMPORTANT RULES:\n"
-        "- Do NOT say 'Job Title' or 'Role Title' literally\n"
-        "- Write the actual job title inside the bold: **Machine Learning Engineer**\n"
-        "- Put the explanation after a colon, on the same line\n"
-        "- Then put 'Required Skills:' on the next line with comma-separated skills\n"
-        "- No extra commentary, blank lines, or bullets — just repeat this 2-line block for each role"
+        "Given a user's resume, suggest exactly 3–5 job roles in the strict format below.\n\n"
+        "Each job MUST follow this format exactly:\n"
+        "**<Job Title>**\n"
+        "Job Description: <1–2 sentence description of the role>\n"
+        "Why Suggested: <1–2 sentence reason based on user resume>\n"
+        "Required Skills: skill1, skill2, skill3, ...\n\n"
+        "Rules:\n"
+        "- Use ** for job titles\n"
+        "- Keep labels exactly as shown (e.g., 'Job Description:')\n"
+        "- No extra explanations, headers, or blank lines\n"
+        "- No bullet points or numbering\n"
+        "- Return only job blocks in the above format, nothing else"
     )
 
     few_shot_example = (
-        "**Machine Learning Engineer**: You have strong experience in Python and ML libraries, making you ideal for building predictive models and AI pipelines.\n"
-        "Required Skills: Python, Scikit-learn, Pandas, NumPy, XGBoost, AWS\n\n"
-        "**Full Stack Developer**: Your experience building web apps with React and Laravel positions you well for full-stack roles involving AI integration.\n"
-        "Required Skills: JavaScript, React, FastAPI, Laravel, Tailwind CSS, Git"
+        "**Machine Learning Engineer**\n"
+        "Job Description: Builds machine learning models to solve business problems using data.\n"
+        "Why Suggested: You have strong Python skills and experience with predictive modeling.\n"
+        "Required Skills: Python, Scikit-learn, NumPy, Pandas, AWS"
     )
 
-    user_prompt = f"Here is the user's skills and experiences:\n{user_input}\n\nSuggest 3–5 jobs as bullet points in that format."
+    user_prompt = (
+        f"Here is the user's resume or skill input:\n\n"
+        f"{user_input}\n\n"
+        f"Now return 3–5 jobs using the exact format and rules above."
+    )
 
     full_prompt = f"{system_prompt}\n\n{few_shot_example}\n\n{user_prompt}"
 
@@ -218,14 +224,29 @@ async def role_info(
     skills: str = Form(...)
 ):
     prompt = f"""
-You are CareerBot. Given the job role and the user's skills below, respond with ONLY valid JSON including:
+    You are CareerBot. Given the job role and user's skills below, respond ONLY in **valid JSON** using this format:
 
-1) description: a 2–3 sentence overview of the role
-2) faqs: an array of exactly 3 {{"question": "...", "answer": "..."}} pairs
+    {{
+    "description": "A 2–3 sentence overview of the role.",
+    "faqs": [
+        {{
+        "question": "First common question",
+        "answer": "Answer to the first question"
+        }},
+        {{
+        "question": "Second common question",
+        "answer": "Answer to the second question"
+        }},
+        {{
+        "question": "Third common question",
+        "answer": "Answer to the third question"
+        }}
+    ]
+    }}
 
-Role: {role}
-User Skills: {skills}
-"""
+    Do NOT include any explanation outside the JSON. Role: {role} — User Skills: {skills}
+    """
+
 
     payload = {
         "model": TOGETHER_MODEL,
@@ -286,26 +307,30 @@ async def search_links(role: str):
 #GENERATE FEEDBACK FOR RESUME
 def generate_resume_feedback(resume_text: str) -> str:
     prompt = f"""
-You are an expert resume reviewer. Analyze the resume below and give section-based feedback.
+    You are an expert resume reviewer. Analyze the resume below and return feedback split into labeled sections.
 
-Break your feedback into the following labeled sections (only include sections that exist in the resume):
+    Required structure (use these exact labels if present):
+    - Summary
+    - Work Experience
+    - Skills
+    - Education
+    - Formatting & Structure
+    - Overall Suggestions
 
-1. Summary
-2. Work Experience
-3. Skills
-4. Education
-5. Formatting & Structure
-6. Overall Suggestions
+    For each section:
+    - Mention strengths (if any)
+    - Point out weaknesses
+    - Suggest 1–2 improvements
+    - Be concise and professional
 
-For each section:
-- Mention what is good (if any)
-- Point out missing or weak parts
-- Suggest 1–2 ways to improve
-- Be concise and friendly
+    IMPORTANT:
+    - Use bullet points if listing
+    - Return sections in order
+    - Do NOT add commentary outside these sections
 
-Resume:
-\"\"\"{resume_text}\"\"\"
-"""
+    Resume:
+    \"\"\"{resume_text}\"\"\"
+    """
 
     payload = {
         "model": TOGETHER_MODEL,
