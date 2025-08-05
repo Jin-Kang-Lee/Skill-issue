@@ -83,23 +83,30 @@ def suggest_jobs(user_input: str) -> str:
     system_message = {
         "role": "system",
         "content": (
-            "You are CareerBot, an expert career advisor. "
-            "Translate a user's skills and experiences into personalized job role suggestions. "
-            "For each role, emit a Markdown bullet like:\n\n"
-            "**Role Title**: A concise 2–3 sentence overview of the role. Describe what the person will do, what types of projects they might work on, and why someone with these skills would be a good fit. Keep it professional and beginner-friendly.\n"
-            "Required Skills: a comma-separated list of 6 to 10 specific skills and tools relevant to the job."
+            "You are CareerBot, an expert career advisor.\n"
+            "Given a user's skills and experiences, suggest 3–5 jobs they are suitable for.\n\n"
+            "For each job, respond in exactly **2 Markdown lines**:\n"
+            "**Job Title Here**: 1–2 sentence explanation of why this role fits\n"
+            "Required Skills: skill1, skill2, skill3, etc.\n\n"
+            "IMPORTANT RULES:\n"
+            "- Do NOT say 'Job Title' or 'Role Title' literally\n"
+            "- Write the actual job title inside the bold: **Machine Learning Engineer**\n"
+            "- Put the explanation after a colon, on the same line\n"
+            "- Then put 'Required Skills:' on the next line with comma-separated skills\n"
+            "- No extra commentary, blank lines, or bullets — just repeat this 2-line block for each role"
         )
     }
 
     few_shot = {
         "role": "assistant",
         "content": (
-            "**Data Analyst**: You’ve used SQL and Excel in past internships to explore trends. Perfect for analyzing data.  \n"
-            "Required Skills: Excel, SQL, Python, Tableau\n\n"
-            "**Software QA Tester**: Your attention to detail and documentation skills suit software testing roles.  \n"
-            "Required Skills: Testing, Selenium, Python, Jira\n\n"
+            "**Machine Learning Engineer**: You have strong experience in Python and ML libraries, making you ideal for building predictive models and AI pipelines.\n"
+            "Required Skills: Python, Scikit-learn, Pandas, NumPy, XGBoost, AWS\n\n"
+            "**Full Stack Developer**: Your experience building web apps with React and Laravel positions you well for full-stack roles involving AI integration.\n"
+            "Required Skills: JavaScript, React, FastAPI, Laravel, Tailwind CSS, Git"
         )
     }
+
 
     user_message = {
         "role": "user",

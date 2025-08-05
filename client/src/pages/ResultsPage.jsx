@@ -72,25 +72,6 @@ function ResultsPage() {
   const [atsScores, setAtsScores] = useState({});
   const [atsVisibleIndex, setAtsVisibleIndex] = useState(null);
 
-  // const handleCardClick = async (index, title) => {
-  //   if (activeIndex === index) {
-  //     setActiveIndex(null)
-  //     return
-  //   }
-
-  //   setActiveIndex(index)
-  //   setLoadingIndex(index)
-  //   try {
-  //     const res = await fetch(`http://localhost:8000/api/search-links/?role=${encodeURIComponent(title)}`)
-  //     const data = await res.json()
-  //     setLinks((prev) => ({ ...prev, [index]: data }))
-  //   } catch (err) {
-  //     console.error('Failed to load links', err)
-  //   } finally {
-  //     setLoadingIndex(null)
-  //   }
-  // }
-
   // Automatically fetch all job links once suggestions are parsed
   useEffect(() => {
     groupedRoles.forEach((role, idx) => {
@@ -183,7 +164,7 @@ function ResultsPage() {
 
                   {/* Title + Description */}
                   <div>
-                    <h3 className="text-lg font-bold text-gray-900">{title}</h3>
+                    <h3 className="text-xl font-bold text-gray-900">{title}</h3>
                     <p className="text-sm text-gray-600 mt-1 line-clamp-2">{description}</p>
 
                     {/* Tags like job links */}
