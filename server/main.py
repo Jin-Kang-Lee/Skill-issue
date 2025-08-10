@@ -13,8 +13,8 @@ import json
 from sentence_transformers import SentenceTransformer
 import urllib.parse
 import re
-import openai
 import logging
+from openai import OpenAI
 logging.basicConfig(level=logging.INFO)
 
 
@@ -23,9 +23,11 @@ load_dotenv()  # local only; harmless on Render
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
-
-openai.api_key = OPENAI_API_KEY
 print("[DEBUG] OpenAI Key Loaded:", (OPENAI_API_KEY[:8] + "…") if OPENAI_API_KEY else "❌ NOT FOUND")
+
+client = OpenAI(api_key=OPENAI_API_KEY)
+MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+
 
 
 # Ollama local API endpoint (change via .env if needed)
@@ -137,8 +139,8 @@ def suggest_jobs(user_input: str) -> str:
         logging.info("[👤] User Prompt (preview):")
         logging.info(user_prompt[:500])
 
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
+        response = client.chat.completions.create(
+            model=MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": few_shot_example},
@@ -249,8 +251,8 @@ async def role_info(
     )
 
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
+        response = client.chat.completions.create(
+            model=MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=512,
@@ -325,8 +327,8 @@ def generate_resume_feedback(resume_text: str) -> str:
     )
 
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
+        response = client.chat.completions.create(
+            model=MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=512,
