@@ -20,50 +20,50 @@ function getGradientAndIcon(title) {
 
 function ResultsPage() {
   const { suggestions } = useContext(SuggestionsContext)
-  const roleLines = suggestions?.split('\n').filter(Boolean) || []
-  const groupedRoles = []
+  const roleLines = suggestions?.split('\n').filter(Boolean) || [];
+  const groupedRoles = [];
 
-  
   for (let i = 0; i < roleLines.length; i++) {
-    const line = roleLines[i];
+    const titleMatch = roleLines[i].match(/^\*\*(.+?)\*\*/);
+    if (!titleMatch) continue;
+    
 
-    // Attempt to match role title and description
-    const match = line.match(/^\*\*(.+?)\*\*:\s*(.+)/);
-
-    let title = "Unknown Role";
-    let description = "";
+    const title = titleMatch[1].trim();
+    if (/^Job\s+\d+$/i.test(title) || title.toLowerCase().includes("untitled")) continue;
+    let description = '';
+    let whySuggested = '';
+    let requiredLine = '';
     let requiredSkills = [];
-    let requiredLine = "";
 
-    if (match) {
-      title = match[1].trim();
-      description = match[2].trim();
-    } else if (line.includes("**") && line.includes(":")) {
-      // Backup parsing if format is messy but contains both
-      const parts = line.split(":");
-      title = parts[0].replace(/\*/g, "").trim();
-      description = parts[1].trim();
-    } else {
-      // Last fallback: use entire line as title
-      title = line.trim();
-    }
+    let j = i + 1;
+    while (j < roleLines.length && !/^\*\*/.test(roleLines[j])) {
+      const line = roleLines[j];
 
-    // Check if next line contains required skills
-    if (i + 1 < roleLines.length && /Required Skills:/i.test(roleLines[i + 1])) {
-      requiredLine = roleLines[i + 1].trim();
-      const skillLine = requiredLine.split(':')[1] || '';
-      requiredSkills = skillLine.split(',').map(s => s.trim()).filter(Boolean);
-      i++; // skip next line
+      if (/^Job Description:/i.test(line)) {
+        description = line.replace(/^Job Description:\s*/i, '').trim();
+      } else if (/^Why Suggested:/i.test(line)) {
+        whySuggested = line.replace(/^Why Suggested:\s*/i, '').trim();
+      } else if (/^Required Skills:/i.test(line)) {
+        requiredLine = line.trim();
+        const skillLine = line.split(':')[1] || '';
+        requiredSkills = skillLine.split(',').map(s => s.trim()).filter(Boolean);
+      }
+
+      j++;
     }
 
     groupedRoles.push({
-      job: line,
+      parsedTitle: title,
+      description,
+      whySuggested,
       required: requiredLine,
       requiredSkills,
-      description,
-      parsedTitle: title,
     });
+
+    i = j - 1; // ✅ Skip ahead to avoid parsing the same block again
   }
+
+
 
 
   const [activeIndex, setActiveIndex] = useState(null)
@@ -135,8 +135,9 @@ function ResultsPage() {
 
         <div className="flex flex-col gap-6">
           {groupedRoles.map((role, idx) => {
-            const match = role.job.match(/\*\*(.+?)\*\*:\s*(.+)/)
-            const title = match ? match[1] : role.job.trim()
+            // const match = role.job.match(/\*\*(.+?)\*\*:\s*(.+)/)
+            // const title = match ? match[1] : role.job.trim()\
+            const title = role.parsedTitle || "Untitled Role"
             const description = role.description || ''
             const roleLinks = links[idx] || []
             const { gradient, watermarkIcon } = getGradientAndIcon(title);
@@ -153,7 +154,9 @@ function ResultsPage() {
             return (
               <div
                 key={idx}
-                className="group flex justify-between items-center bg-white border border-gray-200 rounded-2xl px-6 py-5 shadow-sm hover:shadow-md transition-all hover:scale-[1.01] duration-300"
+                className={`group relative flex justify-between items-center bg-white border border-gray-200 rounded-2xl px-6 py-5 shadow-sm transition-all duration-300 ${
+                  atsVisibleIndex === idx ? 'z-[100]' : 'hover:shadow-md hover:scale-[1.01]'
+                }`}
               >
                 {/* Left Side Content */}
                 <div className="flex items-start gap-4 flex-1">
@@ -165,7 +168,25 @@ function ResultsPage() {
                   {/* Title + Description */}
                   <div>
                     <h3 className="text-xl font-bold text-gray-900">{title}</h3>
-                    <p className="text-sm text-gray-600 mt-1 line-clamp-2">{description}</p>
+
+                    {description && (
+                      <p className="text-sm text-gray-700 mt-1 leading-relaxed">
+                        <strong className="text-gray-800">Job Description:</strong> {description}
+                      </p>
+                    )}
+
+                    {/* Optional required skills */}
+                    {role.whySuggested && (
+                      <p className="text-sm text-gray-700 mt-2 leading-relaxed">
+                        <strong className="text-gray-800">Why Suggested:</strong> {role.whySuggested}
+                      </p>
+                    )}
+
+                    {role.required && (
+                      <p className="text-sm text-gray-700 mt-2 italic leading-relaxed">
+                        <strong className="text-gray-800">Required Skills:</strong> {role.required}
+                      </p>
+                    )}
 
                     {/* Tags like job links */}
                     <div className="flex flex-wrap gap-2 mt-3">
@@ -185,43 +206,37 @@ function ResultsPage() {
                         <span className="text-xs text-gray-400">No links</span>
                       )}
                     </div>
-
-                    {/* Optional required skills */}
-                    {role.required && (
-                      <p className="text-xs italic text-gray-500 mt-2">{role.required}</p>
-                    )}
                   </div>
                 </div>
 
                 {/* Right Side: ATS Button */}
-                <div className="ml-6 flex flex-col items-end justify-center">
+                <div
+                  className="ml-6 flex flex-col items-end justify-center relative"
+                  onMouseEnter={() => {
+                    if (!atsScores[title]) {
+                      handleATSCheck(title, role.requiredSkills || []);
+                    }
+                    setAtsVisibleIndex(idx); // set hovered
+                  }}
+                  onMouseLeave={() => {
+                    setAtsVisibleIndex(null); // hide when hover ends
+                  }}
+                >
                   <button
-                    onClick={() => {
-                      if (atsVisibleIndex === idx) {
-                        // If already open, close it
-                        setAtsVisibleIndex(null);
-                      } else {
-                        // Otherwise, fetch and show
-                        handleATSCheck(title, role.requiredSkills || []);
-                        setAtsVisibleIndex(idx);
-                      }
-                    }}
-                    className="bg-accent text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-accent transition"
+                    className="bg-accent text-white text-sm font-semibold px-4 py-2 rounded-lg transition"
                   >
                     Check ATS Fit
                   </button>
 
-                  {atsScores[title] && (
+                  {atsScores[title] && atsVisibleIndex === idx && (
                     <div
-                      className={`absolute right-6 top-20 bg-white border border-gray-200 rounded-xl shadow-md p-4 z-10 w-72 text-sm transition-all duration-300 ease-in-out ${
-                        atsVisibleIndex === idx ? 'opacity-100' : 'opacity-0 pointer-events-none'
-                      }`}
+                      className="absolute top-full mt-2 right-0 bg-white border border-gray-200 rounded-xl shadow-md p-4 z-[9999] w-72 text-sm transition-all duration-300 ease-in-out opacity-100"
+
                     >
                       <p className="text-gray-800 mb-2">
                         ATS Score: <strong>{atsScores[title].score}%</strong>
                       </p>
 
-                      {/* ✅ Matched Skills */}
                       <div className="flex flex-wrap gap-2 mb-2">
                         {atsScores[title].matched_skills.map((skill, i) => (
                           <span
@@ -233,7 +248,6 @@ function ResultsPage() {
                         ))}
                       </div>
 
-                      {/* ❌ Missing Skills */}
                       <div className="flex flex-wrap gap-2">
                         {atsScores[title].missing_skills.map((skill, i) => (
                           <span
@@ -246,8 +260,8 @@ function ResultsPage() {
                       </div>
                     </div>
                   )}
-
                 </div>
+
               </div>
             )
           })}

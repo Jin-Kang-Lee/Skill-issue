@@ -1,3 +1,4 @@
+print("[✅] Backend is starting...")
 from fastapi import Request, FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 import traceback
@@ -12,20 +13,28 @@ import json
 from sentence_transformers import SentenceTransformer
 import urllib.parse
 import re
+import openai
+import logging
+logging.basicConfig(level=logging.INFO)
 
 
 
-# Load environment variables from .env
-dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
-load_dotenv(dotenv_path)
+load_dotenv()  # local only; harmless on Render
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+
+openai.api_key = OPENAI_API_KEY
+print("[DEBUG] OpenAI Key Loaded:", (OPENAI_API_KEY[:8] + "…") if OPENAI_API_KEY else "❌ NOT FOUND")
+
 
 # Ollama local API endpoint (change via .env if needed)
 # OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434/v1/chat/completions")
 
 # Together.ai API config
-TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
-TOGETHER_MODEL = os.getenv("TOGETHER_MODEL", "mistralai/Mistral-7B-Instruct-v0.1")
-TOGETHER_API_URL = os.getenv("TOGETHER_API_URL", "https://api.together.xyz/v1/completions")
+# TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
+# TOGETHER_MODEL = os.getenv("TOGETHER_MODEL", "mistralai/Mistral-7B-Instruct-v0.1")
+# TOGETHER_API_URL = os.getenv("TOGETHER_API_URL", "https://api.together.xyz/v1/completions")
 
 
 app = FastAPI()
@@ -33,7 +42,7 @@ app = FastAPI()
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "https://skill-issueai.netlify.app"
+    "https://skill-issue-ai.netlify.app"
 ]
 
 
@@ -88,67 +97,73 @@ def extract_text_from_docx(file_path: str) -> str:
     document = docx.Document(file_path)
     return "\n".join([para.text for para in document.paragraphs])
 
+
 # Function to generate job roles using Ollama
 def suggest_jobs(user_input: str) -> str:
+    user_input = user_input.strip()[:3000]
+
     system_prompt = (
-        "You are CareerBot, an expert career advisor.\n"
-        "Given a user's resume, suggest exactly 3–5 job roles in the strict format below.\n\n"
-        "Each job MUST follow this format exactly:\n"
+        "You are CareerBot, an expert career advisor. "
+        "Given a user's resume, suggest 3 to 5 suitable job roles.\n\n"
+        "For each job, follow this format exactly:\n"
         "**<Job Title>**\n"
-        "Job Description: <1–2 sentence description of the role>\n"
-        "Why Suggested: <1–2 sentence reason based on user resume>\n"
-        "Required Skills: skill1, skill2, skill3, ...\n\n"
-        "Rules:\n"
-        "- Use ** for job titles\n"
-        "- Keep labels exactly as shown (e.g., 'Job Description:')\n"
-        "- No extra explanations, headers, or blank lines\n"
-        "- No bullet points or numbering\n"
-        "- Return only job blocks in the above format, nothing else"
+        "Job Description: a 1–2 sentence summary of what the job entails.\n"
+        "Why Suggested: a short reason why this job fits the user.\n"
+        "Required Skills: comma-separated list of relevant skills.\n\n"
+        "DO NOT include numbered job labels like 'Job 1', 'Job 2'.\n"
+        "Only output real job titles using this exact format:\n"
+        "**<Job Title>**"
     )
 
     few_shot_example = (
         "**Machine Learning Engineer**\n"
         "Job Description: Builds machine learning models to solve business problems using data.\n"
-        "Why Suggested: You have strong Python skills and experience with predictive modeling.\n"
-        "Required Skills: Python, Scikit-learn, NumPy, Pandas, AWS"
+        "Why Suggested: Based on your experience with Python and predictive modeling.\n"
+        "Required Skills: Python, NumPy, Pandas, Scikit-learn, AWS"
     )
 
-    user_prompt = (
-        f"Here is the user's resume or skill input:\n\n"
-        f"{user_input}\n\n"
-        f"Now return 3–5 jobs using the exact format and rules above."
-    )
-
-    full_prompt = f"{system_prompt}\n\n{few_shot_example}\n\n{user_prompt}"
-
-    payload = {
-        "model": TOGETHER_MODEL,
-        "prompt": full_prompt,
-        "temperature": 0.7,
-        "max_tokens": 512
-    }
-
-    headers = {
-        "Authorization": f"Bearer {TOGETHER_API_KEY}",
-        "Content-Type": "application/json"
-    }
+    user_prompt = f"Here is the user's resume:\n{user_input}"
 
     try:
-        response = requests.post(TOGETHER_API_URL, headers=headers, json=payload)
-        response.raise_for_status()
-        data = response.json()
-        full_response = data["choices"][0]["text"].strip()
+        logging.info("[🚀] suggest_jobs() called")
+        logging.info("[📝] Resume input length: %d characters", len(user_input))
 
-        if not full_response or "**" not in full_response:
-            print("[❌] Invalid or empty suggestions")
-            return None
+        logging.info("[🧠] System Prompt:")
+        logging.info(system_prompt)
 
-        print("[✅] Suggestions OK:\n", full_response[:300])
-        return full_response
+        logging.info("[💡] Few-shot Example:")
+        logging.info(few_shot_example)
 
-    except requests.RequestException as e:
-        print("[❌] Together.ai request failed:", str(e))
+        logging.info("[👤] User Prompt (preview):")
+        logging.info(user_prompt[:500])
+
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": few_shot_example},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.7,
+            max_tokens=512,
+        )
+
+        result = response.choices[0].message.content.strip()
+        logging.info("[📩] Raw LLM response:")
+        logging.info(repr(result))
+
+
+        if not result or len(result.strip()) < 30:
+            logging.warning("[⚠️] GPT-3.5 returned empty or too short output.")
+            return f"[⚠️] GPT returned no usable output for this input:\n\n{user_input[:500]}"
+
+        logging.info("[✅] Suggestions OK:\n" + result[:300])
+        return result
+
+    except Exception as e:
+        print("[❌] OpenAI job suggestion error:", e)
         return None
+
 
 
 
@@ -179,11 +194,12 @@ async def upload_resume(file: UploadFile = File(None), skills: str = Form(None))
     else:
         return {"error": "No input provided. Please upload a resume or enter skills."}
 
+    print("[DEBUG] Extracted resume input (job suggestion):\n", user_input[:500])
     suggestions = suggest_jobs(user_input)
 
     # ✅ Ensure suggestions are valid
-    if not suggestions or "No job suggestions found" in suggestions:
-        print("[❌] Returning empty job_suggestions to frontend")
+    if not suggestions or len(suggestions.strip()) < 30:
+        print("[❌] LLM response is empty or too short, rejecting.")
         return {
             "job_suggestions": "",
             "resume_text": user_input,
@@ -214,6 +230,7 @@ async def resume_feedback(file: UploadFile = File(...)):
     os.remove(temp_path)
 
     # Generate feedback
+    print("[DEBUG] Extracted resume input (feedback):\n", resume_text[:500])
     feedback = generate_resume_feedback(resume_text)
     return {"feedback": feedback}
 
@@ -223,50 +240,35 @@ async def role_info(
     role: str = Form(...),
     skills: str = Form(...)
 ):
-    prompt = f"""
-    You are CareerBot. Given the job role and user's skills below, respond ONLY in **valid JSON** using this format:
-
-    {{
-    "description": "A 2–3 sentence overview of the role.",
-    "faqs": [
-        {{
-        "question": "First common question",
-        "answer": "Answer to the first question"
-        }},
-        {{
-        "question": "Second common question",
-        "answer": "Answer to the second question"
-        }},
-        {{
-        "question": "Third common question",
-        "answer": "Answer to the third question"
-        }}
-    ]
-    }}
-
-    Do NOT include any explanation outside the JSON. Role: {role} — User Skills: {skills}
-    """
-
-
-    payload = {
-        "model": TOGETHER_MODEL,
-        "prompt": prompt,
-        "temperature": 0.7,
-        "max_tokens": 512
-    }
-
-    headers = {
-        "Authorization": f"Bearer {TOGETHER_API_KEY}",
-        "Content-Type": "application/json"
-    }
+    prompt = (
+        "You are CareerBot. Given a job role and a user's skills, respond ONLY with valid JSON including:\n"
+        "- 'description': a 2–3 sentence summary of the job\n"
+        "- 'faqs': a list of exactly 3 FAQs with 'question' and 'answer' keys\n\n"
+        "Return JSON only. Do not include explanation, markdown, or headings.\n\n"
+        f"Role: {role}\nUser Skills: {skills}"
+    )
 
     try:
-        response = requests.post(TOGETHER_API_URL, headers=headers, json=payload)
-        response.raise_for_status()
-        return response.json()["choices"][0]["text"].strip()
-    except requests.RequestException as e:
-        print("[❌] Together.ai role_info request failed:", str(e))
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=512,
+        )
+        raw = response.choices[0].message.content.strip()
+
+        # Optional: validate it's JSON
+        try:
+            parsed = json.loads(raw)
+            return parsed
+        except Exception:
+            print("[⚠️] GPT returned non-JSON:", raw)
+            return {"error": "Model returned malformed JSON.", "raw": raw}
+
+    except Exception as e:
+        print("[❌] OpenAI role_info request failed:", e)
         return {"error": "Unable to generate role information."}
+
 
 
 
@@ -306,53 +308,34 @@ async def search_links(role: str):
 
 #GENERATE FEEDBACK FOR RESUME
 def generate_resume_feedback(resume_text: str) -> str:
-    prompt = f"""
-    You are an expert resume reviewer. Analyze the resume below and return feedback split into labeled sections.
-
-    Required structure (use these exact labels if present):
-    - Summary
-    - Work Experience
-    - Skills
-    - Education
-    - Formatting & Structure
-    - Overall Suggestions
-
-    For each section:
-    - Mention strengths (if any)
-    - Point out weaknesses
-    - Suggest 1–2 improvements
-    - Be concise and professional
-
-    IMPORTANT:
-    - Use bullet points if listing
-    - Return sections in order
-    - Do NOT add commentary outside these sections
-
-    Resume:
-    \"\"\"{resume_text}\"\"\"
-    """
-
-    payload = {
-        "model": TOGETHER_MODEL,
-        "prompt": prompt,
-        "temperature": 0.7,
-        "max_tokens": 768
-    }
-
-    headers = {
-        "Authorization": f"Bearer {TOGETHER_API_KEY}",
-        "Content-Type": "application/json"
-    }
+    prompt = (
+        "You are an expert resume reviewer. Analyze the following resume and provide section-based feedback.\n"
+        "Only include sections that exist in the resume. Use these labels if applicable:\n"
+        "1. Summary\n"
+        "2. Work Experience\n"
+        "3. Skills\n"
+        "4. Education\n"
+        "5. Formatting & Structure\n"
+        "6. Overall Suggestions\n\n"
+        "For each section:\n"
+        "- Mention what's good (if any)\n"
+        "- Point out weaknesses or missing parts\n"
+        "- Suggest 1–2 improvements\n\n"
+        f"Resume:\n\"\"\"\n{resume_text.strip()[:3000]}\n\"\"\""
+    )
 
     try:
-        response = requests.post(TOGETHER_API_URL, headers=headers, json=payload)
-        response.raise_for_status()
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=512,
+        )
 
-        data = response.json()
-        full_content = data["choices"][0]["text"].strip()
-        return full_content
+        result = response.choices[0].message.content.strip()
+        print("[DEBUG] GPT Feedback Output:", repr(result))
+        return result
 
-    except requests.RequestException as e:
-        print("[❌] Together.ai feedback request failed:", str(e))
+    except Exception as e:
+        print("[❌] OpenAI resume feedback error:", e)
         return "Error generating feedback."
-
