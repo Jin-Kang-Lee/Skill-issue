@@ -3,7 +3,40 @@ import { SuggestionsContext } from '../context/SuggestionsContext';
 import { ExclamationTriangleIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
 
 
-//Helper function to calculate resume score
+const POSITIVE_KEYS = ['good', 'strong', 'clear', 'well', 'effective', 'concise', 'relevant'];
+const ISSUE_KEYS    = ['missing', 'lack', 'lacks', 'incomplete', 'unclear', 'inconsistent', 'typo', 'weak', 'outdated'];
+const ACTION_KEYS   = ['suggest', 'consider', 'recommend', 'improve', 'add', 'remove', 'quantify', 'revise', 'highlight'];
+
+const stripLeadingMarks = (s) =>
+  s.replace(/^[:\-\u2022•\s]+/, '')
+   .replace(/^\s+/, '')
+   .replace(/\s+$/, '');
+
+const tidyPhrasing = (s) => {
+  let t = s.replace(/^could\s+|^may\s+|^might\s+/i, '')
+           .replace(/^it\s+(would|could)\s+be\s+better\s+to\s+/i, 'consider ')
+           .replace(/\bfor example\b/gi, 'e.g.')
+           .replace(/\s+/g, ' ')
+           .trim();
+  t = t.charAt(0).toUpperCase() + t.slice(1);
+  t = t.replace(/[:;,.!?]{2,}$/g, m => m[0]);
+  return t;
+};
+
+const classifyPoint = (raw) => {
+  const txt = raw.toLowerCase();
+  const hasPos   = POSITIVE_KEYS.some(k => txt.includes(k));
+  const hasIssue = ISSUE_KEYS.some(k => txt.includes(k));
+  const hasAct   = ACTION_KEYS.some(k => txt.includes(k));
+
+  if (hasIssue)   return 'missing';
+  if (hasAct)     return 'suggestion';
+  if (hasPos)     return 'good';
+  return 'neutral';
+};
+
+const cleanPoint = (line) => tidyPhrasing(stripLeadingMarks(line));
+
 const calculateScore = (sections) => {
   const weights = {
     "Summary": 20,
@@ -14,29 +47,34 @@ const calculateScore = (sections) => {
     "Overall Suggestions": 10
   };
 
-  let score = 0;
-  let maxScore = 0;
+  let total = 0, max = 0;
 
   for (const [section, weight] of Object.entries(weights)) {
-    maxScore += weight;
-    const content = sections[section];
-    if (content) {
-      const hasMissing = content.some(line => line.toLowerCase().includes('missing'));
-      const hasSuggestion = content.some(line => line.toLowerCase().includes('suggest'));
+    max += weight;
 
-      if (!hasMissing) {
-        score += weight;
-      } else if (!hasSuggestion) {
-        score += weight * 0.6;
-      } else {
-        score += weight * 0.4;
-      }
+    const points = (sections[section] || []).map(cleanPoint);
+    if (points.length === 0) continue;
+
+    const classes = points.map(classifyPoint);
+    const positives = classes.filter(c => c === 'good').length;
+    const issues    = classes.filter(c => c === 'missing').length;
+    const actions   = classes.filter(c => c === 'suggestion').length;
+
+    const denom = positives + issues + actions || 1;
+    let ratio = positives / denom;
+    if (issues > 0) ratio = Math.max(ratio - 0.25 * Math.min(issues, 2), 0);
+
+    const hasHardMissing = points.some(p => /^summary\b.*missing/i.test(p) || /^missing\b/i.test(p));
+    if (hasHardMissing && (section === 'Summary' || section === 'Education')) {
+      ratio = Math.min(ratio, 0.3);
     }
+
+    total += Math.round(weight * ratio);
   }
 
-  const percentage = Math.round((score / maxScore) * 100);
-  return percentage;
+  return Math.max(0, Math.min(100, Math.round((total / max) * 100)));
 };
+
 
 
 //Helper function to breakdown section score
@@ -53,26 +91,31 @@ const getSectionBreakdown = (sections) => {
   const breakdown = [];
 
   for (const [section, weight] of Object.entries(weights)) {
-    const content = sections[section] || [];
-    const hasMissing = content.some(line => line.toLowerCase().includes('missing'));
-    const hasSuggestion = content.some(line => line.toLowerCase().includes('suggest'));
-
-    let score = 0;
-    if (!hasMissing) {
-      score = weight;
-    } else if (!hasSuggestion) {
-      score = weight * 0.6;
-    } else {
-      score = weight * 0.4;
+    const points = (sections[section] || []).map(cleanPoint);
+    if (points.length === 0) {
+      breakdown.push({ section, score: 0, weight, percentage: 0, status: 'weak' });
+      continue;
     }
 
-    breakdown.push({
-      section,
-      score,
-      weight,
-      percentage: Math.round((score / weight) * 100),
-      status: !hasMissing ? 'strong' : (!hasSuggestion ? 'moderate' : 'weak')
-    });
+    const classes = points.map(classifyPoint);
+    const positives = classes.filter(c => c === 'good').length;
+    const issues    = classes.filter(c => c === 'missing').length;
+    const actions   = classes.filter(c => c === 'suggestion').length;
+
+    const denom = positives + issues + actions || 1;
+    let ratio = positives / denom;
+    if (issues > 0) ratio = Math.max(ratio - 0.25 * Math.min(issues, 2), 0);
+
+    const hasHardMissing = points.some(p => /^summary\b.*missing/i.test(p) || /^missing\b/i.test(p));
+    if (hasHardMissing && (section === 'Summary' || section === 'Education')) {
+      ratio = Math.min(ratio, 0.3);
+    }
+
+    const sectionScore = Math.round(weight * ratio);
+    const pct = Math.round((sectionScore / weight) * 100);
+    const status = pct >= 80 ? 'strong' : pct >= 60 ? 'moderate' : 'weak';
+
+    breakdown.push({ section, score: sectionScore, weight, percentage: pct, status });
   }
 
   return breakdown;
@@ -167,7 +210,7 @@ const ResumeFeedbackPage = () => {
         {/* Header */}
         <h2 className="text-4xl font-extrabold text-center mb-12 flex items-center justify-center gap-3">
           <DocumentTextIcon className="w-8 h-8 text-accent" />
-          <span className="w-8 h-8 text-tertiary">Resume Insights</span>
+          <span className="text-accent">Resume Insights</span>
         </h2>
 
         {/* No Feedback Message */}
@@ -201,27 +244,42 @@ const ResumeFeedbackPage = () => {
 
                   {/* Feedback List */}
                   <div className="space-y-5 text-[16px] text-gray-800 leading-relaxed">
-                    <p className="text-base">
-                      {points.map((point, i) => {
-                        const raw = point.replace(/^-\s*/, '');
-                        const labelMatch = raw.match(/^(Good|Missing.*|Suggestions?)[:：]/i);
-                        const label = labelMatch?.[1] ?? '';
-                        const description = raw.replace(/^(Good|Missing.*|Suggestions?)[:：]/i, '').trim();
+                    <ul className="space-y-3 text-[16px] text-gray-800 leading-relaxed list-disc list-inside">
+                      {(() => {
+                        // Rank: Good (0) → Missing (1) → Note/Neutral (2) → Suggestion (3)
+                        const rankOf = (kind) => ({ good: 0, missing: 1, note: 2, neutral: 2, suggestion: 3 }[kind] ?? 2);
 
-                        const labelFormatted = (() => {
-                          if (label.toLowerCase().startsWith('good')) return <strong className="text-green-700">Good:</strong>;
-                          if (label.toLowerCase().startsWith('missing')) return <strong className="text-red-700">Missing:</strong>;
-                          if (label.toLowerCase().startsWith('suggestion')) return <strong className="text-yellow-700">Suggestion:</strong>;
-                          return <strong className="text-gray-700">{label}:</strong>;
-                        })();
+                        const ordered = points
+                          .map((rawPoint) => {
+                            const cleaned = cleanPoint(rawPoint);
+                            const kind = classifyPoint(cleaned); // returns 'good' | 'missing' | 'suggestion' | 'neutral'
+                            return { cleaned, kind, rank: rankOf(kind) };
+                          })
+                          .sort((a, b) => a.rank - b.rank);
 
-                        return (
-                          <span key={i} className="block mb-3">
-                            {labelFormatted} <span className="font-medium">{emphasizeKeywords(description)}</span>
+                        const Badge = ({ children, className }) => (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold mr-2 ${className}`}>
+                            {children}
                           </span>
                         );
-                      })}
-                    </p>
+
+                        return ordered.map(({ cleaned, kind }, i) => {
+                          const badge =
+                            kind === 'good'       ? <Badge className="bg-green-100 text-green-700">Good</Badge> :
+                            kind === 'missing'    ? <Badge className="bg-red-100 text-red-700">Missing</Badge> :
+                            kind === 'suggestion' ? <Badge className="bg-yellow-100 text-yellow-700">Suggestion</Badge> :
+                                                    <Badge className="bg-blue-100 text-gray-700">Note</Badge>;
+
+                          return (
+                            <li key={i} className="pl-1">
+                              {badge}
+                              <span className="font-medium">{emphasizeKeywords(cleaned)}</span>
+                            </li>
+                          );
+                        });
+                      })()}
+                    </ul>
+
                   </div>
 
                 </div>
