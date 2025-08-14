@@ -333,7 +333,7 @@ def suggest_jobs(user_input: str) -> str:
 
     system_prompt = (
         "You are CareerBot, an expert career advisor. "
-        "Given a user's resume, suggest 3 to 5 suitable job roles.\n\n"
+        "Given a user's resume, suggest 5 suitable job roles.\n\n"
         "For each job, follow this format exactly:\n"
         "**<Job Title>**\n"
         "Job Description: a 1–2 sentence summary of what the job entails.\n"

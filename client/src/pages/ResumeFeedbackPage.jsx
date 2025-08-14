@@ -5,7 +5,12 @@ import { ExclamationTriangleIcon, DocumentTextIcon } from '@heroicons/react/24/o
 
 const POSITIVE_KEYS = ['good', 'strong', 'clear', 'well', 'effective', 'concise', 'relevant'];
 const ISSUE_KEYS    = ['missing', 'lack', 'lacks', 'incomplete', 'unclear', 'inconsistent', 'typo', 'outdated'];
-const ACTION_KEYS   = ['suggest', 'consider', 'recommend', 'improve', 'add', 'remove', 'quantify', 'revise', 'highlight'];
+const ACTION_KEYS = [
+  'suggest', 'consider', 'recommend', 'improve', 'add', 'remove', 'quantify',
+  'revise', 'highlight', 'should', 'ensure', 'include', 'update', 'rewrite',
+  'provide', 'clarify', 'reword', 'expand'
+];
+
 
 const SECTION_ALIASES = {
   'summary': 'Summary',
@@ -27,7 +32,6 @@ const normalizeSection = (s) => {
 };
 
 
-//Detects if a feedback line is just a meta/status line (e.g., "Weak (53%)", "Score: 80%") and should be skipped
 const isMetaLine = (line) => {
   const t = line.trim();
   if (!t) return true;
@@ -35,10 +39,14 @@ const isMetaLine = (line) => {
   if (/^\(?\d+%?\)?$/.test(t)) return true;
   if (/^score\s*:\s*\d+%?$/i.test(t)) return true;
   if (/^(note|notes?)$/i.test(t)) return true;
-  // Skip lone category labels like "Good:", "Missing:", "Suggestion:"
-  if (/^(good|missing|weakness(?:es)?|suggestion|suggestions|improvements)\s*[:\-–]?$/i.test(t)) return true;
+
+  // Lone labels like "Good", "(Good)", "Missing:", "[Suggestion]" (with optional punctuation)
+  if (/^\s*[\(\[\{]?\s*(?:good|missing|weakness(?:es)?|suggestion(?:s)?|improvements?)\s*[\]\)\}]?\s*[:\-–—]?\s*$/iu.test(t)) {
+    return true;
+  }
   return false;
 };
+
 
 
 //Removes leading punctuation, bullet points, or whitespace from a feedback point
@@ -48,18 +56,20 @@ const stripLeadingMarks = (s) =>
    .replace(/\s+$/, '');
 
 
-// Remove leading category words like "Good:", "Missing:", "Weaknesses/Missing Parts:", "Suggestion:", etc.
-const CATEGORY_PREFIX_RE = /^(?:\[*\s*)?(?:good|strengths?|positives?|what(?:'|’)s\s+good|missing|weakness(?:es)?(?:\/missing\s*parts?)?|issues?|gaps?|suggestions?|improvements?|to\s+improve|action\s+items?)\s*[:\-–]\s*/i;
+// Matches optional label prefixes like:
+// "(Good) ", "Good:", "[Suggestion] -", "Weaknesses/Missing Parts —", etc.
+const CATEGORY_PREFIX_RE =
+  /^\s*(?:[\(\[\{]?\s*)?(?:good|strengths?|positives?|what(?:['’])s\s+good|missing|weakness(?:es)?(?:\/missing\s*parts?)?|issues?|gaps?|suggestion(?:s)?|improvements?|to\s+improve|action\s+items?)\s*(?:[\]\)\}]|:|[-–—])?\s*/iu;
 
 const stripCategoryPrefix = (s) => {
   let t = s.trim();
-  // Remove repeated prefixes like "Good Good:" or "Missing Weaknesses/Missing Parts:"
-  // Keep stripping while it matches.
   while (CATEGORY_PREFIX_RE.test(t)) {
     t = t.replace(CATEGORY_PREFIX_RE, '').trim();
   }
   return t;
 };
+
+
 
 //Cleans up phrasing in feedback points: removes weak modal verbs, shortens "for example" → "e.g.", trims spaces, and capitalizes
 const tidyPhrasing = (s) => {
@@ -78,13 +88,13 @@ const classifyPoint = (raw) => {
   const txt = cleanPoint(raw).toLowerCase();
   if (!txt) return 'neutral';
 
-  const hasPos   = POSITIVE_KEYS.some(k => txt.includes(k));
   const hasIssue = ISSUE_KEYS.some(k => txt.includes(k));
   const hasAct   = ACTION_KEYS.some(k => txt.includes(k));
+  const hasPos   = POSITIVE_KEYS.some(k => txt.includes(k));
 
-  if (hasIssue)   return 'missing';
-  if (hasPos)     return 'good';
-  if (hasAct)     return 'suggestion';
+  if (hasIssue) return 'missing';
+  if (hasAct)   return 'suggestion';  // <-- action outranks positive
+  if (hasPos)   return 'good';
   return 'neutral';
 };
 
