@@ -26,21 +26,40 @@ const normalizeSection = (s) => {
   return SECTION_ALIASES[key] || s;
 };
 
+
 //Detects if a feedback line is just a meta/status line (e.g., "Weak (53%)", "Score: 80%") and should be skipped
 const isMetaLine = (line) => {
   const t = line.trim();
+  if (!t) return true;
   if (/^(strong|moderate|weak)\s*\(?\d+%?\)?$/i.test(t)) return true;
   if (/^\(?\d+%?\)?$/.test(t)) return true;
   if (/^score\s*:\s*\d+%?$/i.test(t)) return true;
-  if (t.split(/\s+/).length <= 2 && /^(weak|moderate|strong|note|notes?)$/i.test(t)) return true;
+  if (/^(note|notes?)$/i.test(t)) return true;
+  // Skip lone category labels like "Good:", "Missing:", "Suggestion:"
+  if (/^(good|missing|weakness(?:es)?|suggestion|suggestions|improvements)\s*[:\-–]?$/i.test(t)) return true;
   return false;
 };
+
 
 //Removes leading punctuation, bullet points, or whitespace from a feedback point
 const stripLeadingMarks = (s) =>
   s.replace(/^[:\-\u2022•\s]+/, '')
    .replace(/^\s+/, '')
    .replace(/\s+$/, '');
+
+
+// Remove leading category words like "Good:", "Missing:", "Weaknesses/Missing Parts:", "Suggestion:", etc.
+const CATEGORY_PREFIX_RE = /^(?:\[*\s*)?(?:good|strengths?|positives?|what(?:'|’)s\s+good|missing|weakness(?:es)?(?:\/missing\s*parts?)?|issues?|gaps?|suggestions?|improvements?|to\s+improve|action\s+items?)\s*[:\-–]\s*/i;
+
+const stripCategoryPrefix = (s) => {
+  let t = s.trim();
+  // Remove repeated prefixes like "Good Good:" or "Missing Weaknesses/Missing Parts:"
+  // Keep stripping while it matches.
+  while (CATEGORY_PREFIX_RE.test(t)) {
+    t = t.replace(CATEGORY_PREFIX_RE, '').trim();
+  }
+  return t;
+};
 
 //Cleans up phrasing in feedback points: removes weak modal verbs, shortens "for example" → "e.g.", trims spaces, and capitalizes
 const tidyPhrasing = (s) => {
@@ -56,19 +75,28 @@ const tidyPhrasing = (s) => {
 
 //Classifies a feedback point as 'good', 'missing', 'suggestion', or 'neutral' based on keyword matching
 const classifyPoint = (raw) => {
-  const txt = raw.toLowerCase();
+  const txt = cleanPoint(raw).toLowerCase();
+  if (!txt) return 'neutral';
+
   const hasPos   = POSITIVE_KEYS.some(k => txt.includes(k));
   const hasIssue = ISSUE_KEYS.some(k => txt.includes(k));
   const hasAct   = ACTION_KEYS.some(k => txt.includes(k));
 
-  if (hasIssue)   return 'missing';     // -1
-  if (hasPos)     return 'good';        // +1
-  if (hasAct)     return 'suggestion';  // +0.5 (credited in scoring)
+  if (hasIssue)   return 'missing';
+  if (hasPos)     return 'good';
+  if (hasAct)     return 'suggestion';
   return 'neutral';
 };
 
+
 //Cleans a feedback point by stripping leading marks and tidying phrasing
-const cleanPoint = (line) => tidyPhrasing(stripLeadingMarks(line));
+const cleanPoint = (line) => {
+  const noMarks = stripLeadingMarks(line);
+  const noLabels = stripCategoryPrefix(noMarks);
+  // If a line becomes empty after stripping, return empty for skipping later
+  if (!noLabels.trim()) return '';
+  return tidyPhrasing(noLabels);
+};
 
 
 const sectionWeights = {
@@ -286,13 +314,21 @@ const ResumeFeedbackPage = () => {
                         // Rank: Good (0) → Missing (1) → Note/Neutral (2) → Suggestion (3)
                         const rankOf = (kind) => ({ good: 0, missing: 1, note: 2, neutral: 2, suggestion: 3 }[kind] ?? 2);
 
+                        const seen = new Set();
                         const ordered = points
                           .map((rawPoint) => {
+                            if (isMetaLine(rawPoint)) return null;
                             const cleaned = cleanPoint(rawPoint);
-                            const kind = classifyPoint(cleaned); // returns 'good' | 'missing' | 'suggestion' | 'neutral'
+                            if (!cleaned) return null; // skip empties after stripping
+                            const key = cleaned.toLowerCase();
+                            if (seen.has(key)) return null; // dedupe
+                            seen.add(key);
+                            const kind = classifyPoint(cleaned);
                             return { cleaned, kind, rank: rankOf(kind) };
                           })
+                          .filter(Boolean)
                           .sort((a, b) => a.rank - b.rank);
+
 
                         const Badge = ({ children, className }) => (
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold mr-2 ${className}`}>

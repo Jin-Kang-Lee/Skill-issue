@@ -69,6 +69,32 @@ async def catch_exceptions_middleware(request: Request, call_next):
     
     
 
+# Canonical synonym map (expand as you see patterns in real data)
+SYNONYMS = {
+    # ML libs
+    "scikit learn": "scikit-learn",
+    "sklearn": "scikit-learn",
+    "x g boost": "xgboost",
+    "xg boost": "xgboost",
+    "tensorflow": "tensorflow",
+    "tf": "tensorflow",
+    "pytorch": "pytorch",
+    "torch": "pytorch",
+
+    # Data stack
+    "ms excel": "excel",
+    "microsoft excel": "excel",
+    "google sheets": "spreadsheets",
+    "sheets": "spreadsheets",
+
+    # DevOps / tools
+    "ci cd": "ci/cd",
+    "cicd": "ci/cd",
+    "node js": "node.js",
+    "nodejs": "node.js",
+}
+
+
 #ATS obvious non-skills/noise to drop (tune as you go)
 NOISE = {
     "stakeholder education", "stakeholder communication",
@@ -87,11 +113,14 @@ def _normalize(text: str) -> str:
     return t
 
 def _canonicalize(skill: str) -> str:
-    # “Canonical” = normalized; plus very light plural strip for single tokens
     s = _normalize(skill)
-    if s.endswith("s") and len(s) > 3 and " " not in s:
+    # Apply synonyms after normalization
+    s = SYNONYMS.get(s, s)
+    # very light plural strip for single tokens (not acronyms)
+    if s.endswith("s") and len(s) > 3 and " " not in s and s.isalpha():
         s = s[:-1]
     return s
+
 
 def _filter_noise(skills: list[str]) -> list[str]:
     out = []
@@ -115,48 +144,73 @@ def _resume_index(resume_text: str):
             ngrams.add(" ".join(tokens[i:i+n]))
     return norm, tokens, ngrams
 
+
 def _regex_word_boundary(term: str) -> re.Pattern:
-    # word-boundary exact match; special-case tiny terms to avoid false hits
-    if term in {"c", "r", "go"}:
-        return re.compile(rf"(?<!\w){re.escape(term)}(?!\w)", re.IGNORECASE)
+    # For normal-length terms, insist on true word boundaries.
     return re.compile(rf"\b{re.escape(term)}\b", re.IGNORECASE)
+
+
+TINY_TERMS = {"r", "c", "go"}
+
+def _tiny_term_ok(term: str, resume_norm: str) -> bool:
+    """
+    Guardrails so tiny tokens only count in unmistakable contexts.
+    - 'r' only if 'r language' or 'r programming' or 'tidyverse' nearby
+    - 'c' only if 'c++' or 'c#' or 'c language' present
+    - 'go' only if 'golang' or 'go language' present (not 'go live', 'go to')
+    """
+    if term == "r":
+        if re.search(r"\br language\b|\br programming\b|\btidyverse\b|\bdplyr\b|\bggplot2\b", resume_norm):
+            return True
+        return False
+    if term == "c":
+        if re.search(r"\bc\+\+\b|\bc#\b|\bc language\b", resume_norm):
+            return True
+        return False
+    if term == "go":
+        if re.search(r"\bgolang\b|\bgo language\b", resume_norm):
+            return True
+        return False
+    return False
+
 
 # Generate spelling/punctuation variants automatically (no curated map)
 def _generate_variants(skill_norm: str) -> set[str]:
-    """
-    Produce likely spelling/punctuation variants:
-    - hyphen ↔ space ↔ nothing  (scikit-learn / scikit learn / scikitlearn)
-    - dot/slash variants         (node.js / nodejs) (ci/cd / cicd)
-    - simple concatenations      (xg boost ↔ xgboost)
-    - light plural/singular tweak
-    """
-    s = skill_norm
+    s = skill_norm.strip()
     variants = {s}
-    variants.update([
+
+    # Hyphen/space/dot/slash permutations
+    swap_candidates = {
         s.replace("-", " "),
         s.replace(" ", "-"),
         s.replace(".", ""),
         s.replace("/", ""),
         s.replace(" ", ""),
-    ])
+    }
+    variants.update(v for v in swap_candidates if v)
+
+    # If phrase contains spaces/hyphens, also add concatenated form
     if " " in s or "-" in s:
         variants.add(s.replace(" ", "").replace("-", ""))
 
+    # Two-token joiner (e.g., "xg boost" -> "xgboost")
     toks = s.split()
     if len(toks) == 2:
         variants.add("".join(toks))
-    if len(toks) == 1 and 5 <= len(s) <= 10:
-        mid = len(s) // 2
-        variants.add(s[:mid] + " " + s[mid:])
 
-    if s.endswith("s") and " " not in s and len(s) > 3:
+    # Gentle singularization (already in _canonicalize, but keep safe here)
+    if s.endswith("s") and " " not in s and len(s) > 3 and s.isalpha():
         variants.add(s[:-1])
 
+    # Filter out variants that are too short (high FP risk)
     final = set()
     for v in variants:
         v = re.sub(r"\s+", " ", v).strip()
-        if v:
-            final.add(v)
+        if not v:
+            continue
+        if len(v) <= 2 and v.lower() not in TINY_TERMS:
+            continue
+        final.add(v)
     return final
 
 # Optional fuzzy matcher (auto no-op if RapidFuzz not installed)
@@ -184,42 +238,63 @@ async def ats_score(
     # 3) Build resume index once
     resume_norm, _tokens, ngrams = _resume_index(resume_text)
 
-    def match_skill(canon: str) -> bool:
+    def match_skill(canon: str, resume_norm: str, ngrams: set[str]):
+        """
+        Returns (matched_bool, evidence_variant).
+        """
         variants = _generate_variants(canon)
 
-        # First: exact phrase hits via n-grams (covers multi-word & symbol forms)
+        # 0) Tiny-term guard
+        if canon in TINY_TERMS and not _tiny_term_ok(canon, resume_norm):
+            return False, None
+
+        # 1) Exact phrase hits via n-grams (multi-word or symbols)
         for v in variants:
-            if " " in v or "/" in v or "." in v:
+            if " " in v or "/" in v or "." in v or "-" in v:
                 if v in ngrams:
-                    return True
+                    return True, v
 
-        # Second: boundary regex for single-token variants
+        # 2) Boundary regex for single-token variants (min length 3 unless tiny-term)
         for v in variants:
-            if " " not in v and "/" not in v and "." not in v:
-                if _regex_word_boundary(v).search(resume_norm):
-                    return True
-                # special-case: "c" matches c++/c#
-                if v == "c" and re.search(r"\bc\+\+|\bc#\b", resume_norm):
-                    return True
+            v_clean = v.strip()
+            if " " not in v_clean and "/" not in v_clean and "." not in v_clean:
+                if len(v_clean) >= 3 or v_clean in TINY_TERMS:
+                    if v_clean in TINY_TERMS:
+                        # tiny terms already guarded above; do an exact boundary check too
+                        if _regex_word_boundary(v_clean).search(resume_norm):
+                            return True, v_clean
+                    else:
+                        if _regex_word_boundary(v_clean).search(resume_norm):
+                            return True, v_clean
+                        
+        USE_FUZZY = _fuzzy != (lambda a, b: 0)
 
-        # Optional fuzzy safety net for near-variants (phrases only)
-        if _fuzzy != (lambda a, b: 0):
+        def _eligible_for_fuzzy(v: str) -> bool:
+            return (" " in v) and (len(v.replace(" ", "")) >= 8)
+        # 3) Optional fuzzy (heavily gated)
+        if USE_FUZZY:
             for v in variants:
-                if " " in v:
+                if _eligible_for_fuzzy(v):
+                    v_len = len(v.split())
                     for ng in ngrams:
-                        if abs(len(ng.split()) - len(v.split())) <= 1 and _fuzzy(v, ng) >= 90:
-                            return True
+                        if len(ng.split()) == v_len and _fuzzy(v, ng) >= 93:
+                            return True, ng
 
-        return False
+        return False, None
+
 
     # 4) Evaluate unique canonical skills to avoid double-counting
     seen = set()
     matched, missing = [], []
+    evidence_map = {}  # optional: {original_skill: matched_variant}
+
     for original, canon in zip(required_raw, canon_list):
         if canon in seen:
             continue
-        if match_skill(canon):
-            matched.append(original)   # return original label to avoid frontend changes
+        ok, ev = match_skill(canon, resume_norm, ngrams)
+        if ok:
+            matched.append(original)    # keep original label for UI
+            evidence_map[original] = ev # store variant/ngram hit
             seen.add(canon)
         else:
             missing.append(original)
@@ -231,9 +306,12 @@ async def ats_score(
     return {
         "role": role,
         "score": score,
-        "matched_skills": matched,   # same shape as before: list[str]
-        "missing_skills": missing,   # same shape as before: list[str]
+        "matched_skills": matched,
+        "missing_skills": missing,
+        # expose for debugging / optional UI highlight
+        "evidence": evidence_map,
     }
+
 
 
 
