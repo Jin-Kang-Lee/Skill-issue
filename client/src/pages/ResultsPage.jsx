@@ -11,12 +11,12 @@ import {
 } from '@heroicons/react/24/solid'
 
 //Add gradient purple to the top of the cards
-function getGradientAndIcon(title) {
-  return {
-    gradient: 'from-[#5353d7] to-[#5353d7]', // consistent purple
-    watermarkIcon: '💡',
-  }
-}
+// function getGradientAndIcon(title) {
+//   return {
+//     gradient: 'from-[#5353d7] to-[#5353d7]', // consistent purple
+//     watermarkIcon: '💡',
+//   }
+// }
 
 function ResultsPage() {
   const { suggestions } = useContext(SuggestionsContext)
@@ -66,9 +66,7 @@ function ResultsPage() {
 
 
 
-  const [activeIndex, setActiveIndex] = useState(null)
   const [links, setLinks] = useState({})
-  const [loadingIndex, setLoadingIndex] = useState(null)
   const [atsScores, setAtsScores] = useState({});
   const [atsVisibleIndex, setAtsVisibleIndex] = useState(null);
 
@@ -140,7 +138,6 @@ function ResultsPage() {
             const title = role.parsedTitle || "Untitled Role"
             const description = role.description || ''
             const roleLinks = links[idx] || []
-            const { gradient, watermarkIcon } = getGradientAndIcon(title);
             const icons = [
               BriefcaseIcon,
               AcademicCapIcon,
@@ -183,7 +180,7 @@ function ResultsPage() {
                     )}
 
                     {role.required && (
-                      <p className="text-sm text-gray-700 mt-2 italic leading-relaxed">
+                      <p className="text-sm text-gray-700 mt-2 leading-relaxed">
                         <strong className="text-gray-800">Required Skills:</strong> {role.required}
                       </p>
                     )}

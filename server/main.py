@@ -16,6 +16,7 @@ import re
 import logging
 from openai import OpenAI
 logging.basicConfig(level=logging.INFO)
+import re, unicodedata
 
 
 
@@ -67,25 +68,173 @@ async def catch_exceptions_middleware(request: Request, call_next):
         return PlainTextResponse("Internal server error", status_code=500)
     
     
+
+#ATS obvious non-skills/noise to drop (tune as you go)
+NOISE = {
+    "stakeholder education", "stakeholder communication",
+    "communication", "communications", "teamwork",
+    "presentation", "presentations", "documentation",
+    "microsoft office", "google suite", "ms office", "office",
+}
+
+def _normalize(text: str) -> str:
+    t = text.lower()
+    t = unicodedata.normalize("NFKD", t)
+    t = "".join(ch for ch in t if not unicodedata.combining(ch))
+    # keep word chars and +-. / for things like c++, node.js, ci/cd
+    t = re.sub(r"[^\w+\-\.\/ ]+", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+def _canonicalize(skill: str) -> str:
+    # “Canonical” = normalized; plus very light plural strip for single tokens
+    s = _normalize(skill)
+    if s.endswith("s") and len(s) > 3 and " " not in s:
+        s = s[:-1]
+    return s
+
+def _filter_noise(skills: list[str]) -> list[str]:
+    out = []
+    for s in skills:
+        sn = _normalize(s)
+        if sn in NOISE:
+            continue
+        if len(sn.split()) > 5:  # overlong phrases are rarely skills
+            continue
+        out.append(s)
+    return out
+
+def _resume_index(resume_text: str):
+    norm = _normalize(resume_text)
+    tokens = norm.split()
+    # Build n-grams up to 5 tokens for phrase matching
+    ngrams = set()
+    max_n = 5
+    for n in range(1, max_n + 1):
+        for i in range(0, len(tokens) - n + 1):
+            ngrams.add(" ".join(tokens[i:i+n]))
+    return norm, tokens, ngrams
+
+def _regex_word_boundary(term: str) -> re.Pattern:
+    # word-boundary exact match; special-case tiny terms to avoid false hits
+    if term in {"c", "r", "go"}:
+        return re.compile(rf"(?<!\w){re.escape(term)}(?!\w)", re.IGNORECASE)
+    return re.compile(rf"\b{re.escape(term)}\b", re.IGNORECASE)
+
+# Generate spelling/punctuation variants automatically (no curated map)
+def _generate_variants(skill_norm: str) -> set[str]:
+    """
+    Produce likely spelling/punctuation variants:
+    - hyphen ↔ space ↔ nothing  (scikit-learn / scikit learn / scikitlearn)
+    - dot/slash variants         (node.js / nodejs) (ci/cd / cicd)
+    - simple concatenations      (xg boost ↔ xgboost)
+    - light plural/singular tweak
+    """
+    s = skill_norm
+    variants = {s}
+    variants.update([
+        s.replace("-", " "),
+        s.replace(" ", "-"),
+        s.replace(".", ""),
+        s.replace("/", ""),
+        s.replace(" ", ""),
+    ])
+    if " " in s or "-" in s:
+        variants.add(s.replace(" ", "").replace("-", ""))
+
+    toks = s.split()
+    if len(toks) == 2:
+        variants.add("".join(toks))
+    if len(toks) == 1 and 5 <= len(s) <= 10:
+        mid = len(s) // 2
+        variants.add(s[:mid] + " " + s[mid:])
+
+    if s.endswith("s") and " " not in s and len(s) > 3:
+        variants.add(s[:-1])
+
+    final = set()
+    for v in variants:
+        v = re.sub(r"\s+", " ", v).strip()
+        if v:
+            final.add(v)
+    return final
+
+# Optional fuzzy matcher (auto no-op if RapidFuzz not installed)
+try:
+    from rapidfuzz.fuzz import token_set_ratio
+    def _fuzzy(a, b): return token_set_ratio(a, b)
+except Exception:
+    def _fuzzy(a, b): return 0
+    
+    
     
 @app.post("/ats-score/")
 async def ats_score(
     role: str = Form(...),
     resume_text: str = Form(...),
-    skills_csv: str = Form(...)
+    skills_csv: str = Form(...),
 ):
-    required_skills = [s.strip() for s in skills_csv.split(",") if s.strip()]
-    resume_text = resume_text.lower()
+    # 1) Parse & denoise incoming skills (from LLM or your list)
+    required_raw = [s.strip() for s in skills_csv.split(",") if s.strip()]
+    required_raw = _filter_noise(required_raw)
 
-    matched = [s for s in required_skills if s.lower() in resume_text]
-    missing = [s for s in required_skills if s.lower() not in resume_text]
-    score = round((len(matched) / len(required_skills)) * 100) if required_skills else 0
+    # 2) Canonicalize skills (normalize + light plural strip)
+    canon_list = [ _canonicalize(s) for s in required_raw ]
+
+    # 3) Build resume index once
+    resume_norm, _tokens, ngrams = _resume_index(resume_text)
+
+    def match_skill(canon: str) -> bool:
+        variants = _generate_variants(canon)
+
+        # First: exact phrase hits via n-grams (covers multi-word & symbol forms)
+        for v in variants:
+            if " " in v or "/" in v or "." in v:
+                if v in ngrams:
+                    return True
+
+        # Second: boundary regex for single-token variants
+        for v in variants:
+            if " " not in v and "/" not in v and "." not in v:
+                if _regex_word_boundary(v).search(resume_norm):
+                    return True
+                # special-case: "c" matches c++/c#
+                if v == "c" and re.search(r"\bc\+\+|\bc#\b", resume_norm):
+                    return True
+
+        # Optional fuzzy safety net for near-variants (phrases only)
+        if _fuzzy != (lambda a, b: 0):
+            for v in variants:
+                if " " in v:
+                    for ng in ngrams:
+                        if abs(len(ng.split()) - len(v.split())) <= 1 and _fuzzy(v, ng) >= 90:
+                            return True
+
+        return False
+
+    # 4) Evaluate unique canonical skills to avoid double-counting
+    seen = set()
+    matched, missing = [], []
+    for original, canon in zip(required_raw, canon_list):
+        if canon in seen:
+            continue
+        if match_skill(canon):
+            matched.append(original)   # return original label to avoid frontend changes
+            seen.add(canon)
+        else:
+            missing.append(original)
+
+    total = len(set(canon_list))
+    got = len(seen)
+    score = round((got / total) * 100) if total else 0
 
     return {
+        "role": role,
         "score": score,
-        "matched_skills": matched,
-        "missing_skills": missing
+        "matched_skills": matched,   # same shape as before: list[str]
+        "missing_skills": missing,   # same shape as before: list[str]
     }
+
 
 
 

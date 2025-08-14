@@ -4,14 +4,45 @@ import { ExclamationTriangleIcon, DocumentTextIcon } from '@heroicons/react/24/o
 
 
 const POSITIVE_KEYS = ['good', 'strong', 'clear', 'well', 'effective', 'concise', 'relevant'];
-const ISSUE_KEYS    = ['missing', 'lack', 'lacks', 'incomplete', 'unclear', 'inconsistent', 'typo', 'weak', 'outdated'];
+const ISSUE_KEYS    = ['missing', 'lack', 'lacks', 'incomplete', 'unclear', 'inconsistent', 'typo', 'outdated'];
 const ACTION_KEYS   = ['suggest', 'consider', 'recommend', 'improve', 'add', 'remove', 'quantify', 'revise', 'highlight'];
 
+const SECTION_ALIASES = {
+  'summary': 'Summary',
+  'work experience': 'Work Experience',
+  'experience': 'Work Experience',
+  'skills': 'Skills',
+  'education': 'Education',
+  'formatting': 'Formatting & Structure',
+  'formatting & structure': 'Formatting & Structure',
+  'formatting and structure': 'Formatting & Structure',
+  'overall suggestions': 'Overall Suggestions',
+  'overall': 'Overall Suggestions'
+};
+
+//Normalizes section names to a standard format based on aliases (e.g., "Experience" → "Work Experience")
+const normalizeSection = (s) => {
+  const key = s.toLowerCase().trim();
+  return SECTION_ALIASES[key] || s;
+};
+
+//Detects if a feedback line is just a meta/status line (e.g., "Weak (53%)", "Score: 80%") and should be skipped
+const isMetaLine = (line) => {
+  const t = line.trim();
+  if (/^(strong|moderate|weak)\s*\(?\d+%?\)?$/i.test(t)) return true;
+  if (/^\(?\d+%?\)?$/.test(t)) return true;
+  if (/^score\s*:\s*\d+%?$/i.test(t)) return true;
+  if (t.split(/\s+/).length <= 2 && /^(weak|moderate|strong|note|notes?)$/i.test(t)) return true;
+  return false;
+};
+
+//Removes leading punctuation, bullet points, or whitespace from a feedback point
 const stripLeadingMarks = (s) =>
   s.replace(/^[:\-\u2022•\s]+/, '')
    .replace(/^\s+/, '')
    .replace(/\s+$/, '');
 
+//Cleans up phrasing in feedback points: removes weak modal verbs, shortens "for example" → "e.g.", trims spaces, and capitalizes
 const tidyPhrasing = (s) => {
   let t = s.replace(/^could\s+|^may\s+|^might\s+/i, '')
            .replace(/^it\s+(would|could)\s+be\s+better\s+to\s+/i, 'consider ')
@@ -23,52 +54,79 @@ const tidyPhrasing = (s) => {
   return t;
 };
 
+//Classifies a feedback point as 'good', 'missing', 'suggestion', or 'neutral' based on keyword matching
 const classifyPoint = (raw) => {
   const txt = raw.toLowerCase();
   const hasPos   = POSITIVE_KEYS.some(k => txt.includes(k));
   const hasIssue = ISSUE_KEYS.some(k => txt.includes(k));
   const hasAct   = ACTION_KEYS.some(k => txt.includes(k));
 
-  if (hasIssue)   return 'missing';
-  if (hasAct)     return 'suggestion';
-  if (hasPos)     return 'good';
+  if (hasIssue)   return 'missing';     // -1
+  if (hasPos)     return 'good';        // +1
+  if (hasAct)     return 'suggestion';  // +0.5 (credited in scoring)
   return 'neutral';
 };
 
+//Cleans a feedback point by stripping leading marks and tidying phrasing
 const cleanPoint = (line) => tidyPhrasing(stripLeadingMarks(line));
 
-const calculateScore = (sections) => {
-  const weights = {
-    "Summary": 20,
-    "Work Experience": 25,
-    "Skills": 20,
-    "Education": 15,
-    "Formatting & Structure": 10,
-    "Overall Suggestions": 10
-  };
 
+const sectionWeights = {
+  "Summary": 20,
+  "Work Experience": 25,
+  "Skills": 20,
+  "Education": 15,
+  "Formatting & Structure": 10,
+  "Overall Suggestions": 10
+};
+
+const hardMissingRegex = {
+  'Summary': /\b(missing|absent|no)\b.*\b(summary|profile|objective)\b/i,
+  'Education': /\b(missing|absent|no)\b.*\b(education|degree|institution)\b/i
+};
+
+//Computes a normalized "quality ratio" for a section based on counts of good/missing/suggestion points
+const computeSectionRatio = (points, section) => {
+  const classes = points.map(classifyPoint);
+  const positives = classes.filter(c => c === 'good').length;
+  const issues    = classes.filter(c => c === 'missing').length;
+  const actions   = classes.filter(c => c === 'suggestion').length;
+
+  // Suggestions count as half-credit
+  const posLike = positives + 0.5 * actions;
+  const negLike = issues;
+
+  // Laplace smoothing to avoid extreme ratios with few points
+  const smoothedNumerator = posLike + 0.5;
+  const smoothedDenom     = posLike + negLike + 1;
+
+  let ratio = smoothedNumerator / smoothedDenom;
+
+  // Gentle penalty for issues
+  if (issues > 0) ratio = Math.max(ratio - 0.15 * Math.min(issues, 2), 0);
+
+  // Hard penalty if feedback explicitly says the section is missing
+  const hasHardMissing = points.some(p => {
+    const rx = hardMissingRegex[section];
+    return rx ? rx.test(p) : false;
+  });
+  if (hasHardMissing && (section === 'Summary' || section === 'Education')) {
+    ratio = Math.min(ratio, 0.4);
+  }
+
+  return Math.max(0, Math.min(1, ratio));
+};
+
+//Calculates the overall resume readiness score (0–100%) using weighted section scores
+const calculateScore = (sections) => {
   let total = 0, max = 0;
 
-  for (const [section, weight] of Object.entries(weights)) {
+  for (const [section, weight] of Object.entries(sectionWeights)) {
     max += weight;
-
     const points = (sections[section] || []).map(cleanPoint);
     if (points.length === 0) continue;
 
-    const classes = points.map(classifyPoint);
-    const positives = classes.filter(c => c === 'good').length;
-    const issues    = classes.filter(c => c === 'missing').length;
-    const actions   = classes.filter(c => c === 'suggestion').length;
-
-    const denom = positives + issues + actions || 1;
-    let ratio = positives / denom;
-    if (issues > 0) ratio = Math.max(ratio - 0.25 * Math.min(issues, 2), 0);
-
-    const hasHardMissing = points.some(p => /^summary\b.*missing/i.test(p) || /^missing\b/i.test(p));
-    if (hasHardMissing && (section === 'Summary' || section === 'Education')) {
-      ratio = Math.min(ratio, 0.3);
-    }
-
+    const ratio = computeSectionRatio(points, section);
     total += Math.round(weight * ratio);
   }
 
@@ -76,41 +134,18 @@ const calculateScore = (sections) => {
 };
 
 
-
-//Helper function to breakdown section score
+//Creates a breakdown of each section's score, percentage, and strength label ('weak', 'moderate', 'strong')
 const getSectionBreakdown = (sections) => {
-  const weights = {
-    "Summary": 20,
-    "Work Experience": 25,
-    "Skills": 20,
-    "Education": 15,
-    "Formatting & Structure": 10,
-    "Overall Suggestions": 10
-  };
-
   const breakdown = [];
 
-  for (const [section, weight] of Object.entries(weights)) {
+  for (const [section, weight] of Object.entries(sectionWeights)) {
     const points = (sections[section] || []).map(cleanPoint);
     if (points.length === 0) {
       breakdown.push({ section, score: 0, weight, percentage: 0, status: 'weak' });
       continue;
     }
 
-    const classes = points.map(classifyPoint);
-    const positives = classes.filter(c => c === 'good').length;
-    const issues    = classes.filter(c => c === 'missing').length;
-    const actions   = classes.filter(c => c === 'suggestion').length;
-
-    const denom = positives + issues + actions || 1;
-    let ratio = positives / denom;
-    if (issues > 0) ratio = Math.max(ratio - 0.25 * Math.min(issues, 2), 0);
-
-    const hasHardMissing = points.some(p => /^summary\b.*missing/i.test(p) || /^missing\b/i.test(p));
-    if (hasHardMissing && (section === 'Summary' || section === 'Education')) {
-      ratio = Math.min(ratio, 0.3);
-    }
-
+    const ratio = computeSectionRatio(points, section);
     const sectionScore = Math.round(weight * ratio);
     const pct = Math.round((sectionScore / weight) * 100);
     const status = pct >= 80 ? 'strong' : pct >= 60 ? 'moderate' : 'weak';
@@ -122,8 +157,7 @@ const getSectionBreakdown = (sections) => {
 };
 
 
-
-
+//Displays a donut chart visualizing a percentage value with color-coded rings
 const DonutChart = ({ percentage }) => {
   const radius = 60;
   const stroke = 10;
@@ -180,20 +214,23 @@ const DonutChart = ({ percentage }) => {
 const ResumeFeedbackPage = () => {
   const { feedback } = useContext(SuggestionsContext);
   
-
   const parsedSections = React.useMemo(() => {
     const sections = {};
     if (feedback && feedback.trim()) {
       const lines = feedback.split('\n').map(line => line.trim()).filter(Boolean);
       let currentSection = null;
       for (const line of lines) {
-        const sectionMatch = line.match(/^(\d+\.)?\s*(Summary|Work Experience|Skills|Education|Formatting(?: & Structure)?|Overall Suggestions)/i);
+        const sectionMatch = line.match(
+          /^(\d+\.)?\s*(Summary|Work Experience|Experience|Skills|Education|Formatting(?:\s*&\s*Structure)?|Formatting\s+and\s+Structure|Overall(?:\s*Suggestions)?)/i
+        );
         if (sectionMatch) {
-          currentSection = sectionMatch[0].replace(/^(\d+\.)?\s*/, '').trim();
-          sections[currentSection] = [];
+          const rawTitle = sectionMatch[0].replace(/^(\d+\.)?\s*/, '').trim();
+          currentSection = normalizeSection(rawTitle);
+          sections[currentSection] = sections[currentSection] || [];
         } else if (currentSection) {
-          if (!sections[currentSection]) sections[currentSection] = [];
-          sections[currentSection].push(line);
+          if (!isMetaLine(line)) {
+            sections[currentSection].push(line);
+          }
         }
       }
     }
